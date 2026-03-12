@@ -57,7 +57,7 @@ const upload = multer({
         }
     }
 });
-
+app.set("trust proxy", 1);
 app.use(session({
     name:"isonga.sid",
     secret:process.env.SESSION_SECRET,
