@@ -1112,6 +1112,7 @@ app.get("/api/get_seller/:id", async (req, res) => {
   if (!seller) return res.json({ success: false });
   res.json({ success: true, seller });
 });
+
 app.get("/api/buyer/conversations", async (req, res) => {
   try {
     const buyerId = req.session.buyerId;
