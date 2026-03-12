@@ -26,6 +26,7 @@ app.use(express.static("public"));
 app.use("/uploads",express.static(path.join(__dirname,"public/uploads")));
 
 const allowedOrigins = [
+    "https://isonga-frontend.vercel.app",
     "https://isonga-frontend-jpbbycl0m-carlos078754s-projects.vercel.app",
     "https://isonga-frontend-git-main-carlos078754s-projects.vercel.app", // Added the one from your error
     "http://localhost:5173" // For your local testing
