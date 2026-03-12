@@ -1710,6 +1710,21 @@ app.get("/test-db", async (req, res) => {
     res.status(500).send({ status: "ERROR", message: err.message });
   }
 });
+
+app.get("/api/buyer_profile", async (req, res) => {
+  try {
+    if (!req.session.buyerId) {
+      return res.status(401).json({ message: "Not logged in" });
+    }
+
+    const buyer = await Buyer.findById(req.session.buyerId);
+
+    res.json({ success: true, buyer });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // START SERVER
 // ==============================
 const Port = process.env.PORT || 8000;
