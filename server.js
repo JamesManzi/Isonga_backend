@@ -44,7 +44,7 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
-const fs = require("fs");
+
 const path = require("path");
 
 const uploadDir = path.join(__dirname, "public/uploads");
