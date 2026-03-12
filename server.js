@@ -23,7 +23,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-app.use("/uploads",express.static(path.join(__dirname,"public/uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 
 const allowedOrigins = [
     "https://isonga-frontend.vercel.app",
@@ -57,20 +57,16 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit (important for videos)
-    },
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: function (req, file, cb) {
-        if (
-            file.mimetype.startsWith("image/") ||
-            file.mimetype.startsWith("video/")
-        ) {
+        if (file.mimetype.startsWith("image/") || file.mimetype.startsWith("video/")) {
             cb(null, true);
         } else {
             cb(new Error("Only images and videos are allowed"));
         }
     }
 });
+
 app.set("trust proxy", 1);
 app.use(session({
     name:"isonga.sid",
@@ -634,7 +630,7 @@ app.put("/api/products/update/:id", upload.array("files", 10), async (req, res) 
 
     // Append new files instead of replacing
     if (req.files && req.files.length > 0) {
-      const newFiles = req.files.map(file => "/uploads/" + file.filename);
+      const newFiles = req.files.map(file => file.filename);
       updatedData.files = updatedData.files.concat(newFiles);
     }
 
