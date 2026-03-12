@@ -7,7 +7,6 @@ const session=require("express-session");
 const cors=require("cors");
 const multer=require("multer");
 require("dotenv").config();
-const path=require("path");
 const Seller=require("./models/seller");
 const Buyer=require("./models/buyer");
 const Product=require("./models/product");
@@ -45,6 +44,7 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
+const fs = require('fs');
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
