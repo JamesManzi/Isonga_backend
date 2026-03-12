@@ -22,8 +22,7 @@ const app=express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// This ensures that the 'public/uploads' folder is served under the '/uploads' URL prefix
-app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
+app.use('/uploads', express.static('public/uploads'));
 
 const allowedOrigins = [
     "https://isonga-frontend.vercel.app",
