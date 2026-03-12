@@ -791,17 +791,21 @@ res.json({
 const http = require("http").createServer(app);
 const { Server } = require("socket.io");
 
+
 const io = new Server(http, {
   cors: {
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        // Allow if it's in the list OR if it ends with .vercel.app
+        if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.endsWith(".vercel.app")) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
-  }
+    credentials: true,
+    methods: ["GET", "POST"]
+  },
+  transports: ["websocket", "polling"] // Ensures a fallback exists
 });
 
 // Store online users
