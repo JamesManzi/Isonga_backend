@@ -15,7 +15,7 @@ const Message = require("./models/Message");
 const MongoStore = require("connect-mongo").default || require("connect-mongo");
 const Cart = require("./models/Cart");
 const Order = require("./models/Order");
-const path=require("path");
+
 
 const app=express();
 
@@ -44,6 +44,13 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
+const fs = require("fs");
+const path = require("path");
+
+const uploadDir = path.join(__dirname, "public/uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
