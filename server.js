@@ -1,3 +1,5 @@
+const dns = require('node:dns');
+dns.setDefaultResultOrder('ipv4first');
 const express=require("express");
 const mongoose=require("mongoose");
 const bcrypt=require("bcryptjs");
@@ -11,7 +13,7 @@ const Buyer=require("./models/buyer");
 const Product=require("./models/product");
 const Rating=require("./models/Rating");
 const Message = require("./models/Message");
-const MongoStore = require("connect-mongo").default;
+const MongoStore = require("connect-mongo").default || require("connect-mongo");
 const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 
@@ -24,9 +26,10 @@ app.use(express.static("public"));
 app.use("/uploads",express.static(path.join(__dirname,"public/uploads")));
 
 app.use(cors({
-    origin:"http://localhost:5173",
-    credentials:true
-}))
+    origin: "https://isonga-frontend-jpbbycl0m-carlos078754s-projects.vercel.app", // Use your full Vercel URL
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"]
+}));
 
 
 const storage = multer.diskStorage({
@@ -61,22 +64,25 @@ app.use(session({
     resave:false,
     saveUninitialized:false,
     store: MongoStore.create({
-        mongoUrl: "mongodb://127.0.0.1:27017/Isonga",
+         mongoUrl: process.env.MONGO_URL,
         collectionName: "sessions"
     }),
 
     cookie:{
         httpOnly:true,
-        secure:false,
-        sameSite:"lax",
+        secure:true,
+        sameSite:"none",
         maxAge:1000*60*30
     }
 }))
 
-mongoose.connect("mongodb://127.0.0.1:27017/Isonga")
-
-.then(()=>console.log("Database Connected"))
-.catch((error)=>console.log(error));
+mongoose.connect(process.env.MONGO_URL)
+.then(async () => {
+  console.log("✅ Database Connected");
+  const collections = await mongoose.connection.db.listCollections().toArray();
+  console.log("Collections in DB:", collections.map(c => c.name));
+})
+.catch((error) => console.log("❌ DB connection error:", error));
 
 app.post("/api/logout", (req, res) => {
     req.session.destroy((err) => {
@@ -774,7 +780,7 @@ const { Server } = require("socket.io");
 
 const io = new Server(http, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: "https://isonga-frontend-jpbbycl0m-carlos078754s-projects.vercel.app",
     credentials: true
   }
 });
@@ -1674,6 +1680,15 @@ app.post("/api/rate_seller", async (req, res) => {
     res.json({ success: true, message: "Rating submitted!" });
   } catch (error) {
     res.status(500).json({ success: false });
+  }
+});
+
+app.get("/test-db", async (req, res) => {
+  try {
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    res.send({ status: "OK", collections });
+  } catch (err) {
+    res.status(500).send({ status: "ERROR", message: err.message });
   }
 });
 // START SERVER
