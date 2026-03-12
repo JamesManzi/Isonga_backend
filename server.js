@@ -22,7 +22,8 @@ const app=express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
+// This ensures that the 'public/uploads' folder is served under the '/uploads' URL prefix
+app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
 
 const allowedOrigins = [
     "https://isonga-frontend.vercel.app",
@@ -44,6 +45,11 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
+const fs = require('fs');
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
