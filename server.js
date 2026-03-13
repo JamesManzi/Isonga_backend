@@ -45,28 +45,9 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
+const { storage } = require('./cloudinary');
+const upload = multer({ storage });
 
-
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, "public/uploads")
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + "-" + file.originalname);
-    }
-});
-
-const upload = multer({
-    storage,
-    limits: { fileSize: 50 * 1024 * 1024 },
-    fileFilter: function (req, file, cb) {
-        if (file.mimetype.startsWith("image/") || file.mimetype.startsWith("video/")) {
-            cb(null, true);
-        } else {
-            cb(new Error("Only images and videos are allowed"));
-        }
-    }
-});
 
 app.set("trust proxy", 1);
 app.use(session({
@@ -111,12 +92,12 @@ app.post("/api/register",upload.fields([
         const{name,location,phone,email,password,repeat_pass,description,category}=req.body;
    let profile = "";
 if (req.files && req.files.profile && req.files.profile.length > 0) {
-    profile = req.files.profile[0].filename;
+    profile = req.files.profile[0].path;
 }
 
     let files=[];
     if(req.files&&req.files.files){
-        files=req.files.files.map(file=>file.filename);
+        files=req.files.files.map(file=>file.path);
     }
 
     const ExistingSeller=await Seller.findOne({email});
