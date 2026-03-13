@@ -242,7 +242,7 @@ if (!rule.test(password)) {
     })
     } catch (error) {
         console.log(error);
-        return res.status(500).json({success:false,message:"Register Error"});
+        return res.status(500).json({ success: false, debug: error.message });
     }
 })
 
