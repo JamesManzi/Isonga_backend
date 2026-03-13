@@ -24,24 +24,28 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const allowedOrigins = [
-    "https://isonga-frontend.vercel.app",
-    "https://isonga-frontend-jpbbycl0m-carlos078754s-projects.vercel.app",
-    "https://isonga-frontend-git-main-carlos078754s-projects.vercel.app", // Added the one from your error
-    "http://localhost:5173" // For your local testing
+  "https://isonga-frontend.vercel.app",
+  "http://localhost:5173"
 ];
 
 app.use(cors({
-    origin: function (origin, callback) {
-        // allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
-            return callback(new Error('CORS policy does not allow access from this origin'), false);
-        }
-        return callback(null, true);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"]
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    // ✅ Allow your main domain + any Vercel preview subdomain
+    if (
+      allowedOrigins.includes(origin) ||
+      origin.endsWith(".vercel.app")
+    ) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("CORS policy does not allow access from this origin"), false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"]
 }));
+
 
 const { upload } = require('./cloudinary');
 
@@ -771,18 +775,18 @@ const { Server } = require("socket.io");
 const io = new Server(http, {
   cors: {
     origin: function (origin, callback) {
-        // Allow if it's in the list OR if it ends with .vercel.app
-        if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.endsWith(".vercel.app")) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
     },
     credentials: true,
     methods: ["GET", "POST"]
   },
-  transports: ["websocket", "polling"] // Ensures a fallback exists
+  transports: ["websocket", "polling"]
 });
+
 
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
