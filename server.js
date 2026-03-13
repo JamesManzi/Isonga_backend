@@ -204,7 +204,7 @@ if (!rule.test(password)) {
 
     let profile="";
     if(req.file){
-        profile=req.file.filename;
+        profile=req.file.path;
     }
 
     await Buyer.create({
@@ -270,7 +270,7 @@ app.post("/api/add_product",upload.array("files",10),async(req,res)=>{
 
    let files = [];
 if(req.files&&req.files.length>0){
-    files = req.files.map(file => file.filename);
+    files = req.files.map(file => file.path);
 }
 
     await Product.create({
