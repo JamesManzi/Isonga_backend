@@ -1,15 +1,16 @@
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const CloudinaryStorage = require('multer-storage-cloudinary'); // ⚠️ no destructuring
 const multer = require('multer');
 
-cloudinary.config(); // reads CLOUDINARY_URL from .env
+// Reads CLOUDINARY_URL from .env automatically
+cloudinary.config();
 
 const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'uploads',
-    allowed_formats: ['jpg', 'png', 'mp4'],
-    public_id: (req, file) => Date.now() + '-' + file.originalname,
+  cloudinary: cloudinary,
+  folder: 'uploads', // ✅ use folder directly
+  allowedFormats: ['jpg', 'png', 'mp4'], // ✅ camelCase
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
   },
 });
 

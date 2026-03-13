@@ -43,8 +43,7 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
-const { storage } = require('./cloudinary');
-const upload = multer({ storage });
+const { upload } = require('./cloudinary');
 
 
 app.set("trust proxy", 1);
