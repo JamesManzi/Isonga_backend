@@ -23,8 +23,6 @@ const app=express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static('public/uploads'));
-
 const allowedOrigins = [
     "https://isonga-frontend.vercel.app",
     "https://isonga-frontend-jpbbycl0m-carlos078754s-projects.vercel.app",

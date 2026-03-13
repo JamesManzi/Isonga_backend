@@ -1,17 +1,18 @@
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const multer = require('multer');
 
-
-// Automatically uses CLOUDINARY_URL from .env
-cloudinary.config();
+cloudinary.config(); // reads CLOUDINARY_URL from .env
 
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'uploads', // Cloudinary folder name
+    folder: 'uploads',
     allowed_formats: ['jpg', 'png', 'mp4'],
     public_id: (req, file) => Date.now() + '-' + file.originalname,
   },
 });
 
-module.exports = { cloudinary, storage };
+const upload = multer({ storage });
+
+module.exports = { cloudinary, storage, upload };
