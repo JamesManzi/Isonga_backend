@@ -23,27 +23,9 @@ const app=express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const allowedOrigins = [
-  "https://isonga-frontend.vercel.app",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173"
-];
-
 app.use(cors({
-  origin: function(origin, callback){
-    // allow server-to-server requests or Postman (no origin)
-    if(!origin) return callback(null,true);
-
-    // allow your frontend
-    if(allowedOrigins.includes(origin) || origin.includes(".vercel.app")){
-      return callback(null,true);
-    }
-
-    callback(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-  methods:["GET","POST","PUT","DELETE"],
-  allowedHeaders:["Content-Type","Authorization"]
+  origin: "https://isonga-frontend.vercel.app",  // <-- your frontend
+  credentials: true, // if you send cookies/sessions
 }));
 
 const { upload } = require('./cloudinary');
@@ -770,20 +752,9 @@ res.json({
 const http = require("http").createServer(app);
 const { Server } = require("socket.io");
 
-const io = new Server(http, {
+const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-
-      if (
-        allowedOrigins.includes(origin) ||
-        origin.includes(".vercel.app")
-      ) {
-        return callback(null, true);
-      }
-
-      callback(new Error("Not allowed by CORS"));
-    },
+    origin: "https://isonga-frontend.vercel.app",
     methods: ["GET", "POST"],
     credentials: true
   }
