@@ -44,7 +44,7 @@ app.use(session({
 
     cookie:{
         httpOnly:true,
-        secure:false,
+        secure:true,
         sameSite:"none",
         maxAge:1000*60*30
     }
@@ -749,13 +749,13 @@ res.json({
   }
 });
 
-const http = require("http").createServer(app);
+const httpServer = require("http").createServer(app);
 const { Server } = require("socket.io");
 
-const io = new Server(server, {
+const io = new Server(httpServer, {
   cors: {
     origin: "https://isonga-frontend.vercel.app",
-    methods: ["GET", "POST"],
+    methods: ["GET","POST"],
     credentials: true
   }
 });
@@ -1693,5 +1693,6 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ==============================
 const Port = process.env.PORT || 8000;
-http.listen(Port, () => console.log(`Server running on port ${Port}`));
-
+httpServer.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
