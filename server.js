@@ -26,7 +26,6 @@ app.use(cors({
   credentials: true,
 }));
 
-app.options("*", cors()); // This explicitly handles the OPTIONS request for all routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -1697,5 +1696,5 @@ app.use((err, req, res, next) => {
 // ==============================
 const PORT = process.env.PORT || 10000;
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server is running on port ${PORT}`);
 });
