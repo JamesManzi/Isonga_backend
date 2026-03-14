@@ -24,8 +24,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
-  origin: "https://isonga-frontend.vercel.app",  // <-- your frontend
-  credentials: true, // if you send cookies/sessions
+  origin: "https://isonga-frontend.vercel.app",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
 }));
 
 const { upload } = require('./cloudinary');
@@ -755,9 +757,10 @@ const { Server } = require("socket.io");
 const io = new Server(httpServer, {
   cors: {
     origin: "https://isonga-frontend.vercel.app",
-    methods: ["GET","POST"],
+    methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  transports: ['websocket', 'polling'] // Explicitly allow both
 });
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
@@ -1692,7 +1695,7 @@ app.use((err, req, res, next) => {
 });
 // START SERVER
 // ==============================
-const Port = process.env.PORT || 8000;
+const PORT = process.env.PORT || 10000;
 httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
