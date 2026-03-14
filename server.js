@@ -25,26 +25,23 @@ app.use(express.urlencoded({ extended: true }));
 
 const allowedOrigins = [
   "https://isonga-frontend.vercel.app",
-  "http://localhost:5173"
+  "http://localhost:5173",
+  "http://127.0.0.1:5173"
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
+  origin: function(origin, callback){
+    if(!origin) return callback(null,true);
 
-    // ✅ Allow your main domain + any Vercel preview subdomain
-    if (
-      allowedOrigins.includes(origin) ||
-      origin.endsWith(".vercel.app")
-    ) {
-      return callback(null, true);
+    if(allowedOrigins.includes(origin) || origin.includes(".vercel.app")){
+      return callback(null,true);
     }
 
-    return callback(new Error("CORS policy does not allow access from this origin"), false);
+    callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  methods:["GET","POST","PUT","DELETE"],
+  allowedHeaders:["Content-Type","Authorization"]
 }));
 
 
@@ -64,7 +61,7 @@ app.use(session({
 
     cookie:{
         httpOnly:true,
-        secure:true,
+        secure:false,
         sameSite:"none",
         maxAge:1000*60*30
     }
@@ -772,23 +769,24 @@ res.json({
 const http = require("http").createServer(app);
 const { Server } = require("socket.io");
 
-
 const io = new Server(http, {
   cors: {
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.includes(".vercel.app")
+      ) {
+        return callback(null, true);
       }
+
+      callback(new Error("Not allowed by CORS"));
     },
-    credentials: true,
-    methods: ["GET", "POST"]
-  },
-  transports: ["websocket", "polling"]
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
-
-
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
 const onlineUsers = new Map();
@@ -1710,6 +1708,15 @@ app.get("/api/buyer_profile", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+app.use((err, req, res, next) => {
+  console.error("Global error:", err);
+
+  res.status(500).json({
+    success:false,
+    message:"Server error",
+    error: err.message
+  });
 });
 // START SERVER
 // ==============================
