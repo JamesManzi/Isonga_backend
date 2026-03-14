@@ -31,8 +31,10 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function(origin, callback){
+    // allow server-to-server requests or Postman (no origin)
     if(!origin) return callback(null,true);
 
+    // allow your frontend
     if(allowedOrigins.includes(origin) || origin.includes(".vercel.app")){
       return callback(null,true);
     }
@@ -43,7 +45,6 @@ app.use(cors({
   methods:["GET","POST","PUT","DELETE"],
   allowedHeaders:["Content-Type","Authorization"]
 }));
-
 
 const { upload } = require('./cloudinary');
 
