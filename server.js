@@ -80,7 +80,7 @@ if (req.files && req.files.profile && req.files.profile.length > 0) {
 
     let files=[];
     if(req.files&&req.files.files){
-        files=req.files.files.map(file=>file.path);
+        files = req.files.map(file => file.path || file.secure_url || file.filename);
     }
 
     const ExistingSeller=await Seller.findOne({email});
