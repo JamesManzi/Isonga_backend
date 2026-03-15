@@ -247,37 +247,46 @@ app.post("/api/buyer_login",async(req,res)=>{
     }
 })
 
-app.post("/api/add_product",upload.array("files",10),async(req,res)=>{
-   try {
-     if(!req.session.sellerId){
-        return res.json({success:false,message:"Seller Not Logged In"});
-     }
-     const{name,price,location,category,description,quantity}=req.body;
+app.post("/api/add_product", upload.array("files",10), async (req,res)=>{
+try{
 
-   let files = [];
-if(req.files&&req.files.length>0){
-    files = req.files.map(file => file.path);
+if(!req.session.sellerId){
+return res.json({success:false,message:"Seller Not Logged In"});
 }
 
-    await Product.create({
-        name,
-        price,
-        location,
-        files,
-        category,
-        description,
-        quantity,
-        seller: req.session.sellerId
-    })
-    res.json({
-        success:true,
-        message:"Product Added SuccessFully"
-    })
-   } catch (error) {
-    console.log(error);
-    return res.status(500).json({success:false,message:"Add Products Error"});
-   }
-})
+const {type,name,price,location,category,description,quantity}=req.body;
+
+let files=[];
+
+if(req.files && req.files.length>0){
+files=req.files.map(file=>file.path);
+}
+
+await Product.create({
+seller:req.session.sellerId,
+type,
+name,
+price,
+location,
+category,
+description,
+quantity,
+files
+});
+
+res.json({
+success:true,
+message:"Item Added Successfully"
+});
+
+}catch(error){
+console.log(error);
+res.status(500).json({
+success:false,
+message:"Add Item Error"
+});
+}
+});
 
 app.get("/api/dashboard", async (req, res) => {
   try {
