@@ -1,5 +1,5 @@
 const cloudinary = require("cloudinary").v2;
-const { CloudinaryStorage } = require("multer-storage-cloudinary"); // Use destructuring here
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const multer = require("multer");
 
 cloudinary.config({
@@ -8,14 +8,22 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = new CloudinaryStorage({ // Use 'new CloudinaryStorage'
+const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: "uploads",
-    allowed_formats: ["jpg", "png", "jpeg", "mp4"], // Note the underscore in allowed_formats
+  params: async (req, file) => {
+
+    const isVideo = file.mimetype.startsWith("video");
+
+    return {
+      folder: "uploads",
+      resource_type: isVideo ? "video" : "image",
+      allowed_formats: isVideo
+        ? ["mp4", "webm", "ogg"]
+        : ["jpg", "png", "jpeg", "gif"]
+    };
   },
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
 
 module.exports = { cloudinary, storage, upload };
