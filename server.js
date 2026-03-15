@@ -518,6 +518,28 @@ app.get("/api/Service_Products/:id",async(req,res)=>{
         return res.status(500).json({success:false,message:"View Products Error"});
     }
 })
+
+app.get("/api/Asset_Products/:id",async(req,res)=>{
+  try {
+        if(!req.session.buyerId){
+            return res.json({success:false,message:"Buyer Not Logged In"})
+        }
+        const sellerId=req.params.id;
+        const seller=await Seller.findById(sellerId);
+        if (!seller) {
+      return res.json({ success: false, message: "Seller not found" });
+    }
+    const products=await Product.find({seller:sellerId});
+        res.json({
+            success:true,
+            seller,
+            products
+        })
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({success:false,message:"View Products Error"});
+    }
+})
 app.get("/api/sellers/:category", async (req, res) => {
   try {
     // Find sellers by category
