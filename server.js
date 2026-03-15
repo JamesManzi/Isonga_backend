@@ -17,21 +17,22 @@ const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 const path = require("path");
 
-
+// Creating App
 const app=express();
+//Cross Origin Configure
 app.use(cors({
   origin: "https://isonga-frontend.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 }));
-
+// Define How Data Are Sent
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+// Store Uploads
 const { upload } = require('./cloudinary');
 
-
+// Session Configure
 app.set("trust proxy", 1);
 app.use(session({
     name:"isonga.sid",
@@ -50,15 +51,15 @@ app.use(session({
         maxAge:1000*60*30
     }
 }))
-
+// Database Connection
 mongoose.connect(process.env.MONGO_URL)
 .then(async () => {
-  console.log("✅ Database Connected");
+  console.log(" Database Connected");
   const collections = await mongoose.connection.db.listCollections().toArray();
   console.log("Collections in DB:", collections.map(c => c.name));
 })
-.catch((error) => console.log("❌ DB connection error:", error));
-
+.catch((error) => console.log(" DB connection error:", error));
+// Logout Roots
 app.post("/api/logout", (req, res) => {
     req.session.destroy((err) => {
         if (err) return res.status(500).json({ success: false,message:"Logout Error" });
@@ -66,7 +67,7 @@ app.post("/api/logout", (req, res) => {
         res.json({ success: true });
     });
 });
-
+//  Seller Register
 app.post("/api/register",upload.fields([
     {name:"profile",maxCount:1},
     {name:"files",maxCount:5}
@@ -346,6 +347,7 @@ app.get("/api/dashboard", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
 app.get("/api/my_store",async(req,res)=>{
  try {
     if(!req.session.sellerId){
@@ -381,7 +383,7 @@ app.get("/api/seller_profile", async (req, res) => {
 
     // Get ratings with buyer name AND profile
     const ratings = await Rating.find({ seller: seller._id })
-      .populate("buyer", "name profile") // ✅ populate profile too
+      .populate("buyer", "name profile") //  populate profile too
       .sort({ createdAt: -1 });
 
     // Calculate average rating
@@ -458,7 +460,7 @@ app.get("/api/view_profile/:id", async (req, res) => {
       return res.json({ success: false, message: "Seller not found" });
     }
 
-    // ✅ POPULATE BUYER NAME
+    //  POPULATE BUYER NAME
     const ratings = await Rating.find({ seller: sellerId })
       .populate("buyer", "name profile");
 
