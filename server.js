@@ -300,35 +300,15 @@ app.get("/api/dashboard", async (req, res) => {
     const seller = await Seller.findById(sellerId);
     if (!seller) return res.json({ success: false, message: "Seller not found" });
 
-    // PERFORMANCE FIX: Use aggregation to get all stats at once
-    const stats = await Product.aggregate([
-      { $match: { seller: new mongoose.Types.ObjectId(sellerId) } },
-      {
-        $facet: {
-          "totalViews": [{ $group: { _id: null, total: { $sum: "$views" } } }],
-          "inventoryStats": [
-            { $group: { _id: "$type", count: { $sum: 1 } } }
-          ]
-        }
-      }
-    ]);
-
-    // Format category stats: { Product: X, Service: Y, Asset: Z }
-    const inventoryStats = { Product: 0, Service: 0, Asset: 0 };
-    stats[0].inventoryStats.forEach(item => {
-      inventoryStats[item._id] = item.count;
-    });
-
-    const totalViews = stats[0].totalViews[0]?.total || 0;
-
-    // Calculate Ratings
+    // 1. CALCULATE ACTUAL RATINGS (Crucial Fix)
+    // Assuming you have a Rating model that stores { seller: sellerId, rating: Number }
     const ratings = await Rating.find({ seller: sellerId });
     const numReviews = ratings.length;
     const averageRating = numReviews > 0 
       ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews 
       : 0;
 
-    // Calculate Sales & Orders
+    // 2. Calculate Total Sales
     const orders = await Order.find({ "items.seller": sellerId });
     let totalSales = 0;
     orders.forEach(order => {
@@ -339,16 +319,29 @@ app.get("/api/dashboard", async (req, res) => {
       });
     });
 
+    // 3. Count Total Orders
+    const totalOrders = await Order.countDocuments({ "items.seller": sellerId });
+
+    // 4. Count NEW Orders
+    const newOrders = await Order.countDocuments({ 
+      "items.seller": sellerId, 
+      status: "Pending" 
+    });
+
+    // 5. Get Views from Products
+    const products = await Product.find({ seller: sellerId });
+    const totalViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
+
     res.json({
       success: true,
       seller: {
         ...seller.toObject(),
         totalSales,
-        totalOrders: orders.length,
-        newOrders: await Order.countDocuments({ "items.seller": sellerId, status: "Pending" }),
+        totalOrders,
+        newOrders,
+        // Send the freshly calculated rating data
         averageRating: Number(averageRating.toFixed(1)), 
-        numReviews,
-        inventoryStats // Sent to frontend for the 3 cards
+        numReviews: numReviews
       },
       totalViews
     });
@@ -357,6 +350,7 @@ app.get("/api/dashboard", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
 app.get("/api/my_store",async(req,res)=>{
  try {
     if(!req.session.sellerId){
