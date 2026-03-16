@@ -1814,7 +1814,7 @@ buyer.password = await bcrypt.hash(req.body.password,10);
 }
 
 if(req.file){
-buyer.profile = req.file.filename;
+buyer.profile = req.file.path;
 }
 
 await buyer.save();
