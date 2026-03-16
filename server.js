@@ -320,6 +320,7 @@ app.get("/api/dashboard", async (req, res) => {
       });
     });
 
+    const totalBookings = await Booking.countDocuments({ seller: sellerId });
     // 3. Count Total Orders
     const totalOrders = await Order.countDocuments({ "items.seller": sellerId });
 
@@ -338,7 +339,7 @@ app.get("/api/dashboard", async (req, res) => {
       seller: {
         ...seller.toObject(),
         totalSales,
-        totalOrders,
+        totalOrders: seller.sellerType === "Service" ? totalBookings : totalOrders,
         newOrders,
         // Send the freshly calculated rating data
         averageRating: Number(averageRating.toFixed(1)), 
@@ -1386,6 +1387,50 @@ app.get("/api/sellers/search", async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ success: false });
+  }
+});
+
+app.post("/api/bookService", async (req, res) => {
+  try {
+    // 1. Check if user is logged in (Buyer)
+    if (!req.session.buyerId) {
+      return res.json({ success: false, message: "Please login to book a service" });
+    }
+
+    const { productId, name, phone, date, time, message } = req.body;
+
+    // 2. Find the product to identify the seller
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.json({ success: false, message: "Service not found" });
+    }
+
+    // 3. Create the booking in the database
+    const newBooking = await Booking.create({
+      buyer: req.session.buyerId,
+      seller: product.seller, // Link to the seller who owns the service
+      product: productId,
+      name,
+      phone,
+      date,
+      time,
+      message,
+      status: "Pending"
+    });
+
+    // 4. (Optional) Emit a socket event so the seller sees it instantly
+    const io = req.app.get("socketio"); 
+    if (io) {
+        io.to(product.seller.toString()).emit("newOrderNotification", {
+            message: `New Booking from ${name}!`
+        });
+    }
+
+    res.json({ success: true, message: "Booking Sent Successfully!", booking: newBooking });
+
+  } catch (error) {
+    console.error("Booking Error:", error);
+    res.status(500).json({ success: false, message: "Server Error during booking" });
   }
 });
 
