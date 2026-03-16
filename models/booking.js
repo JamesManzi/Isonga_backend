@@ -45,6 +45,8 @@ const bookingSchema = new mongoose.Schema({
     enum: ["Pending", "Confirmed", "Completed", "Cancelled"],
     default: "Pending"
   },
+  paymentMethod: { type: String, enum: ["cash", "mobile", "card"], required: true },
+paymentScreenshot: { type: String }, // store Cloudinary URL or file path
   createdAt: {
     type: Date,
     default: Date.now

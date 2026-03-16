@@ -1733,67 +1733,55 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Add this route to your server.js
-app.post("/api/bookService", async (req, res) => {
+const Booking = require("./models/booking");
+
+// Multer/Cloudinary upload middleware already imported as `upload`
+
+app.post("/api/bookings", upload.single("paymentScreenshot"), async (req, res) => {
   try {
-    // 1. Ensure the buyer is logged in
-    const buyerId = req.session.buyerId;
-    if (!buyerId) {
-      return res.status(401).json({ success: false, message: "Please login to book a service" });
+    if (!req.session.buyerId) {
+      return res.json({ success: false, message: "Buyer not logged in" });
     }
 
-    const { productId, name, phone, date, time, message } = req.body;
+    const { sellerId, productId, name, phone, date, time, message, paymentMethod } = req.body;
 
-    // 2. Find the service/product to get the Seller's ID
-    const service = await Product.findById(productId);
-    if (!service) {
-      return res.status(404).json({ success: false, message: "Service not found" });
-    }
-
-    // 3. Save the booking
-    const newBooking = new Booking({
-      buyer: buyerId,
-      seller: service.seller, // We get this from the product/service object
+    const booking = await Booking.create({
+      buyer: req.session.buyerId,
+      seller: sellerId,
       product: productId,
       name,
       phone,
       date,
       time,
-      message
+      message,
+      paymentMethod,
+      paymentScreenshot: req.file ? req.file.path : null,
+      status: "Pending"
     });
 
-    await newBooking.save();
-
-    res.json({ 
-      success: true, 
-      message: "Booking Sent Successfully!", 
-      booking: newBooking 
-    });
-
-  } catch (error) {
-    console.error("Booking Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    res.json({ success: true, booking });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Booking error" });
   }
 });
 
 app.get("/api/seller/bookings", async (req, res) => {
   try {
     if (!req.session.sellerId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.json({ success: false, message: "Seller not logged in" });
     }
 
-    // Fetch bookings and populate buyer details (name/phone) 
-    // and the specific service (product) name
     const bookings = await Booking.find({ seller: req.session.sellerId })
-      .populate("buyer", "name profile")
-      .populate("product", "name price")
-      .sort({ createdAt: -1 });
+      .populate("product", "name");
 
     res.json({ success: true, bookings });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching bookings" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 });
+
 
 app.put("/api/update_buyer_profile", upload.single("profile"), async (req,res)=>{
 
