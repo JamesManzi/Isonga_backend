@@ -9,10 +9,15 @@ const sellerSchema = new mongoose.Schema({
     files: [{ type: String, required: true }],
     password: { type: String, required: true },
     description: { type: String, required: true },
-    category: { type: String, required: true }
+    category: { type: String, required: true },
+      sellerType:{
+       type: String,
+        enum: ["Product", "Service", "Asset"],
+        required: true
+    }
 });
 
-// ✅ Add a text index for full-text search
+//  Add a text index for full-text search
 sellerSchema.index({ name: "text", category: "text", location: "text", description: "text" });
 
 module.exports = mongoose.model("Seller", sellerSchema);

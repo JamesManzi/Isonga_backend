@@ -74,7 +74,7 @@ app.post("/api/register",upload.fields([
     {name:"files",maxCount:5}
 ]),async(req,res)=>{
     try {
-        const{name,location,phone,email,password,repeat_pass,description,category}=req.body;
+        const{name,location,phone,email,password,repeat_pass,description,category,sellerType}=req.body;
    let profile = "";
 if (req.files && req.files.profile && req.files.profile.length > 0) {
     profile = req.files.profile[0].path;
@@ -118,7 +118,8 @@ if (!rule.test(password)) {
         password:hash,
         files,
         profile,
-        category
+        category,
+        sellerType
 
     })
 
