@@ -291,8 +291,6 @@ message:"Add Item Error"
 }
 });
 
-// ... existing imports ...
-
 app.get("/api/dashboard", async (req, res) => {
   try {
     const sellerId = req.session.sellerId;
@@ -301,15 +299,28 @@ app.get("/api/dashboard", async (req, res) => {
     const seller = await Seller.findById(sellerId);
     if (!seller) return res.json({ success: false, message: "Seller not found" });
 
-    // 1. CALCULATE ACTUAL RATINGS (Crucial Fix)
-    // Assuming you have a Rating model that stores { seller: sellerId, rating: Number }
+    // 1. Calculate Ratings
     const ratings = await Rating.find({ seller: sellerId });
     const numReviews = ratings.length;
     const averageRating = numReviews > 0 
       ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews 
       : 0;
 
-    // 2. Calculate Total Sales
+    // 2. Fetch Data based on Seller Type
+    let totalActivityCount = 0;
+    let newActivityCount = 0;
+
+    if (seller.sellerType === "Service") {
+      // COUNT BOOKINGS for Service Sellers
+      totalActivityCount = await Booking.countDocuments({ seller: sellerId });
+      newActivityCount = await Booking.countDocuments({ seller: sellerId, status: "Pending" });
+    } else {
+      // COUNT ORDERS for Product Sellers
+      totalActivityCount = await Order.countDocuments({ "items.seller": sellerId });
+      newActivityCount = await Order.countDocuments({ "items.seller": sellerId, status: "Pending" });
+    }
+
+    // 3. Calculate Total Sales (Revenue)
     const orders = await Order.find({ "items.seller": sellerId });
     let totalSales = 0;
     orders.forEach(order => {
@@ -320,17 +331,7 @@ app.get("/api/dashboard", async (req, res) => {
       });
     });
 
-    const totalBookings = await Booking.countDocuments({ seller: sellerId });
-    // 3. Count Total Orders
-    const totalOrders = await Order.countDocuments({ "items.seller": sellerId });
-
-    // 4. Count NEW Orders
-    const newOrders = await Order.countDocuments({ 
-      "items.seller": sellerId, 
-      status: "Pending" 
-    });
-
-    // 5. Get Views from Products
+    // 4. Get Views
     const products = await Product.find({ seller: sellerId });
     const totalViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
 
@@ -339,9 +340,8 @@ app.get("/api/dashboard", async (req, res) => {
       seller: {
         ...seller.toObject(),
         totalSales,
-        totalOrders: seller.sellerType === "Service" ? totalBookings : totalOrders,
-        newOrders,
-        // Send the freshly calculated rating data
+        totalOrders: totalActivityCount, // This maps to "Bookings" in your frontend if type is Service
+        newOrders: newActivityCount,
         averageRating: Number(averageRating.toFixed(1)), 
         numReviews: numReviews
       },
@@ -1390,50 +1390,6 @@ app.get("/api/sellers/search", async (req, res) => {
   }
 });
 
-app.post("/api/bookService", async (req, res) => {
-  try {
-    // 1. Check if user is logged in (Buyer)
-    if (!req.session.buyerId) {
-      return res.json({ success: false, message: "Please login to book a service" });
-    }
-
-    const { productId, name, phone, date, time, message } = req.body;
-
-    // 2. Find the product to identify the seller
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.json({ success: false, message: "Service not found" });
-    }
-
-    // 3. Create the booking in the database
-    const newBooking = await Booking.create({
-      buyer: req.session.buyerId,
-      seller: product.seller, // Link to the seller who owns the service
-      product: productId,
-      name,
-      phone,
-      date,
-      time,
-      message,
-      status: "Pending"
-    });
-
-    // 4. (Optional) Emit a socket event so the seller sees it instantly
-    const io = req.app.get("socketio"); 
-    if (io) {
-        io.to(product.seller.toString()).emit("newOrderNotification", {
-            message: `New Booking from ${name}!`
-        });
-    }
-
-    res.json({ success: true, message: "Booking Sent Successfully!", booking: newBooking });
-
-  } catch (error) {
-    console.error("Booking Error:", error);
-    res.status(500).json({ success: false, message: "Server Error during booking" });
-  }
-});
-
 app.post("/api/cart/add", async (req, res) => {
     try {
         const { productId, quantity } = req.body;
@@ -1777,24 +1733,65 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.post("/api/book", async (req, res) => {
+// Add this route to your server.js
+app.post("/api/bookService", async (req, res) => {
   try {
-    const { productId, name, phone, date, message } = req.body;
+    // 1. Ensure the buyer is logged in
+    const buyerId = req.session.buyerId;
+    if (!buyerId) {
+      return res.status(401).json({ success: false, message: "Please login to book a service" });
+    }
 
-    const booking = new Booking({
-      productId,
+    const { productId, name, phone, date, time, message } = req.body;
+
+    // 2. Find the service/product to get the Seller's ID
+    const service = await Product.findById(productId);
+    if (!service) {
+      return res.status(404).json({ success: false, message: "Service not found" });
+    }
+
+    // 3. Save the booking
+    const newBooking = new Booking({
+      buyer: buyerId,
+      seller: service.seller, // We get this from the product/service object
+      product: productId,
       name,
       phone,
       date,
+      time,
       message
     });
 
-    await booking.save();
+    await newBooking.save();
 
-    res.json({ success: true });
+    res.json({ 
+      success: true, 
+      message: "Booking Sent Successfully!", 
+      booking: newBooking 
+    });
 
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error("Booking Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+app.get("/api/seller/bookings", async (req, res) => {
+  try {
+    if (!req.session.sellerId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // Fetch bookings and populate buyer details (name/phone) 
+    // and the specific service (product) name
+    const bookings = await Booking.find({ seller: req.session.sellerId })
+      .populate("buyer", "name profile")
+      .populate("product", "name price")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, bookings });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching bookings" });
   }
 });
 // START SERVER
