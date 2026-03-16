@@ -1215,56 +1215,49 @@ app.get("/api/buyer/conversations", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
 app.post("/api/product/view/:productId", async (req, res) => {
   try {
+
     const { productId } = req.params;
-    const buyerId = req.session.buyerId; 
-    
-    if (!buyerId) return res.json({ success: false, message: "Guest views not tracked uniquely" });
+    const buyerId = req.session.buyerId;
+
+    if (!buyerId) return res.json({ success:false });
 
     const product = await Product.findById(productId);
-    if (!product) return res.json({ success: false });
+    if (!product) return res.json({ success:false });
 
-    // 1. Get the start of "today" in UTC
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setHours(0,0,0,0);
 
-    // 2. Check if there is an entry for today in dailyViews
-    let todayEntry = product.dailyViews.find(v => 
+    let todayEntry = product.dailyViews.find(v =>
       new Date(v.date).getTime() === today.getTime()
     );
 
-    let isNewViewForToday = false;
+    let isNewView = false;
 
     if (!todayEntry) {
-      // First person to view this product today
-      product.dailyViews.push({ date: today, buyers: [buyerId] });
-      isNewViewForToday = true;
-    } else if (!todayEntry.buyers.includes(buyerId)) {
-      // Buyer has not viewed this product yet today
+      product.dailyViews.push({
+        date: today,
+        buyers: [buyerId]
+      });
+      isNewView = true;
+
+    } else if (!todayEntry.buyers.some(id => id.toString() === buyerId)) {
       todayEntry.buyers.push(buyerId);
-      isNewViewForToday = true;
+      isNewView = true;
     }
 
-    // 3. Only update the database and notify the seller if it's a new unique view
-    if (isNewViewForToday) {
-      product.views += 1; 
+    if (isNewView) {
+      product.views = (product.views || 0) + 1;
       await product.save();
-
-      // Recalculate total store views for the real-time dashboard
-      const sellerProducts = await Product.find({ seller: product.seller });
-      const totalStoreViews = sellerProducts.reduce((sum, p) => sum + (p.views || 0), 0);
-      
-      const sellerSocket = onlineUsers.get(`Seller_${product.seller}`);
-      if (sellerSocket) {
-        io.to(sellerSocket).emit("newView", { totalViews: totalStoreViews });
-      }
     }
 
-    res.json({ success: true, counted: isNewViewForToday });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    res.json({ success:true });
+
+  } catch(err) {
+    console.error("View Error:", err);
+    res.status(500).json({ success:false });
   }
 });
 
