@@ -1216,48 +1216,36 @@ app.get("/api/buyer/conversations", async (req, res) => {
   }
 });
 
-app.post("/api/product/view/:productId", async (req, res) => {
+app.get("/api/product/view/:id", async (req, res) => {
   try {
-
-    const { productId } = req.params;
+    const productId = req.params.id;
     const buyerId = req.session.buyerId;
 
-    if (!buyerId) return res.json({ success:false });
-
-    const product = await Product.findById(productId);
-    if (!product) return res.json({ success:false });
-
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    let todayEntry = product.dailyViews.find(v =>
-      new Date(v.date).getTime() === today.getTime()
-    );
-
-    let isNewView = false;
-
-    if (!todayEntry) {
-      product.dailyViews.push({
-        date: today,
-        buyers: [buyerId]
-      });
-      isNewView = true;
-
-    } else if (!todayEntry.buyers.some(id => id.toString() === buyerId)) {
-      todayEntry.buyers.push(buyerId);
-      isNewView = true;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ success: false, message: "Invalid ID" });
     }
 
-    if (isNewView) {
-      product.views = (product.views || 0) + 1;
+    // 1. Find product and increment total views
+    const product = await Product.findByIdAndUpdate(
+      productId,
+      { $inc: { views: 1 } },
+      { new: true }
+    ).populate("seller", "name profile location phone description");
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // 2. Track Unique Buyers (if logged in)
+    if (buyerId && !product.uniqueBuyers.includes(buyerId)) {
+      product.uniqueBuyers.push(buyerId);
       await product.save();
     }
 
-    res.json({ success:true });
-
-  } catch(err) {
-    console.error("View Error:", err);
-    res.status(500).json({ success:false });
+    res.json({ success: true, product });
+  } catch (error) {
+    console.error("View Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
