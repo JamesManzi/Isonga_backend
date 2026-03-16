@@ -16,6 +16,7 @@ const MongoStore = require("connect-mongo").default || require("connect-mongo");
 const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 const path = require("path");
+const Booking=require("./models/booking");
 
 // Creating App
 const app=express();
@@ -1745,6 +1746,27 @@ app.use((err, req, res, next) => {
     message:"Server error",
     error: err.message
   });
+});
+
+app.post("/api/book", async (req, res) => {
+  try {
+    const { productId, name, phone, date, message } = req.body;
+
+    const booking = new Booking({
+      productId,
+      name,
+      phone,
+      date,
+      message
+    });
+
+    await booking.save();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 // START SERVER
 // ==============================
