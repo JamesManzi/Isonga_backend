@@ -22,7 +22,7 @@ const Booking=require("./models/booking");
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin: ["https://isonga-frontend.vercel.app"],
+  origin: ["https://isonga-frontend.vercel.app","http://localhost:3000"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -1733,7 +1733,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-const Booking = require("./models/booking");
 
 // Multer/Cloudinary upload middleware already imported as `upload`
 
