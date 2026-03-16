@@ -22,7 +22,7 @@ const Booking=require("./models/booking");
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin: ["https://isonga-frontend.vercel.app","http://localhost:3000"],
+  origin: ["https://isonga-frontend.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
