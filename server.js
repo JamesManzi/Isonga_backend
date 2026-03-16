@@ -1799,27 +1799,27 @@ app.put("/api/update_buyer_profile", upload.single("profile"), async (req,res)=>
 
 try{
 
-const buyerId=req.session.buyerId;
+const buyerId = req.session.buyerId;
 
-const buyer=await Buyer.findById(buyerId);
+const buyer = await Buyer.findById(buyerId);
 
 if(!buyer){
 return res.json({success:false});
 }
 
-buyer.name=req.body.name;
-buyer.email=req.body.email;
+buyer.name = req.body.name;
+
+if(req.body.password){
+buyer.password = await bcrypt.hash(req.body.password,10);
+}
 
 if(req.file){
-buyer.profile=req.file.filename;
+buyer.profile = req.file.filename;
 }
 
 await buyer.save();
 
-res.json({
-success:true,
-buyer
-});
+res.json({success:true,buyer});
 
 }catch(err){
 console.log(err);
