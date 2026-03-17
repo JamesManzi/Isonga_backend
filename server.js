@@ -1860,6 +1860,42 @@ app.delete("/api/cart/remove/:id", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
+app.post("/api/seller/mark-activity-read", async (req, res) => {
+  try {
+    const sellerId = req.session.sellerId;
+
+    if (!sellerId) {
+      return res.status(401).json({ success: false });
+    }
+
+    const seller = await Seller.findById(sellerId);
+
+    if (!seller) {
+      return res.json({ success: false });
+    }
+
+    if (seller.sellerType === "Service") {
+      // BOOKINGS
+      await Booking.updateMany(
+        { seller: sellerId, status: "Pending" },
+        { $set: { status: "Seen" } }
+      );
+    } else {
+      // ORDERS
+      await Order.updateMany(
+        { "items.seller": sellerId, status: "Pending" },
+        { $set: { status: "Seen" } }
+      );
+    }
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false });
+  }
+});
 // START SERVER
 // ==============================
 const PORT = process.env.PORT || 10000;
