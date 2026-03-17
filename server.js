@@ -1733,20 +1733,27 @@ app.use((err, req, res, next) => {
   });
 });
 
-
-// Multer/Cloudinary upload middleware already imported as `upload`
-
-app.post("/api/bookings", upload.single("paymentScreenshot"), async (req, res) => {
+// POST: Create a new booking
+// Note: "paymentProof" here must match the key used in formData.append() on frontend
+app.post("/api/bookService", upload.single("paymentProof"), async (req, res) => {
   try {
+    // 1. Check Auth
     if (!req.session.buyerId) {
-      return res.json({ success: false, message: "Buyer not logged in" });
+      return res.status(401).json({ success: false, message: "Please login to book" });
     }
 
-    const { sellerId, productId, name, phone, date, time, message, paymentMethod } = req.body;
+    const { productId, name, phone, date, time, message, paymentMethod } = req.body;
 
-    const booking = await Booking.create({
+    // 2. Fetch the product to get the associated Seller ID
+    const productData = await Product.findById(productId);
+    if (!productData) {
+      return res.status(404).json({ success: false, message: "Service not found" });
+    }
+
+    // 3. Prepare the booking data
+    const bookingData = {
       buyer: req.session.buyerId,
-      seller: sellerId,
+      seller: productData.seller, // Automatically link the seller from the product
       product: productId,
       name,
       phone,
@@ -1754,33 +1761,81 @@ app.post("/api/bookings", upload.single("paymentScreenshot"), async (req, res) =
       time,
       message,
       paymentMethod,
-      paymentScreenshot: req.file ? req.file.path : null,
       status: "Pending"
-    });
+    };
 
-    res.json({ success: true, booking });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Booking error" });
-  }
-});
-
-app.get("/api/seller/bookings", async (req, res) => {
-  try {
-    if (!req.session.sellerId) {
-      return res.json({ success: false, message: "Seller not logged in" });
+    // 4. Handle the uploaded file if it exists
+    if (req.file) {
+      // Map the file path to your model's field name: paymentScreenshot
+      bookingData.paymentScreenshot = req.file.path; 
     }
 
-    const bookings = await Booking.find({ seller: req.session.sellerId })
-      .populate("product", "name");
+    // 5. Save to Database
+    const newBooking = await Booking.create(bookingData);
 
-    res.json({ success: true, bookings });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    res.json({
+      success: true,
+      message: "Booking Sent Successfully!",
+      booking: newBooking
+    });
+
+  } catch (error) {
+    console.error("Booking Route Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+// GET: Fetch all bookings for a specific seller
+app.get("/api/seller/bookings", async (req, res) => {
+  try {
+    // 1. Verify seller session
+    if (!req.session.sellerId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // 2. Find bookings where the seller ID matches the session
+    // We populate 'product' to see what service was booked
+    const bookings = await Booking.find({ seller: req.session.sellerId })
+      .populate("product", "name price")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      bookings
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Error fetching bookings" });
   }
 });
 
+// PUT: Update booking status (Approve/Reject/Complete)
+app.put("/api/bookings/:id", async (req, res) => {
+  try {
+    if (!req.session.sellerId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { status } = req.body;
+    const bookingId = req.params.id;
+
+    // Optional: Security check to ensure this booking belongs to this seller
+    const booking = await Booking.findById(bookingId);
+    if (!booking || booking.seller.toString() !== req.session.sellerId) {
+      return res.status(403).json({ success: false, message: "Permission denied" });
+    }
+
+    booking.status = status;
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: `Booking ${status} successfully`
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Update failed" });
+  }
+});
 
 app.put("/api/update_buyer_profile", upload.single("profile"), async (req,res)=>{
 
