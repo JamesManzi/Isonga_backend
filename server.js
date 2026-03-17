@@ -1873,28 +1873,52 @@ res.json({success:false});
 app.delete("/api/cart/remove/:id", async (req, res) => {
   try {
     const buyerId = req.session.buyerId;
+    if (!buyerId) {
+      return res.status(401).json({ success: false, message: "Not logged in" });
+    }
+
     const identifier = req.params.id;
 
+    // Find the buyer's cart
     const cart = await Cart.findOne({ buyer: buyerId });
-    if (!cart) return res.status(404).json({ success: false });
+    if (!cart) {
+      return res.status(404).json({ success: false, message: "Cart not found" });
+    }
 
-    // This logic removes the item if the ID matches 
-    // EITHER the product ID OR the specific cart item ID
-    cart.items = cart.items.filter(item => {
-      return item._id.toString() !== identifier && 
-             (item.product ? item.product.toString() !== identifier : true);
+    // Filter logic to handle both valid products and "ghost" (deleted) products
+    const initialLength = cart.items.length;
+    
+    cart.items = cart.items.filter((item) => {
+      // 1. Check if the ID matches the Product ID (Normal case)
+      const isProductIdMatch = item.product && item.product.toString() === identifier;
+      
+      // 2. Check if the ID matches the unique Cart Item ID (Broken/Deleted case)
+      const isCartItemIdMatch = item._id.toString() === identifier;
+
+      // Keep the item only if it matches NEITHER
+      return !isProductIdMatch && !isCartItemIdMatch;
     });
 
-    // Recalculate total price safely
+    if (cart.items.length === initialLength) {
+      return res.json({ success: false, message: "Item not found in cart" });
+    }
+
+    // Recalculate Total Price safely
+    // Since item.product might be null, we use the price stored on the cart item itself
     cart.totalPrice = cart.items.reduce((acc, item) => {
       return acc + (item.price * item.quantity);
     }, 0);
 
     await cart.save();
-    res.json({ success: true, message: "Item removed" });
+
+    res.json({
+      success: true,
+      message: "Item removed from cart",
+      cart
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false });
+    console.error("Remove from cart error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 // START SERVER
