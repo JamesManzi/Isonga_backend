@@ -1498,86 +1498,67 @@ app.get("/api/cart/count", async (req,res)=>{
  }
 });
 
-// Add this to your server.js
-app.post("/api/order", async (req, res) => {
-    try {
-        if (!req.session.buyerId) {
-            return res.status(401).json({ success: false, message: "Please login to place an order" });
-        }
+app.post("/api/order", upload.single("paymentProof"), async (req, res) => {
+  try {
+    const buyerId = req.session.buyerId;
+    if (!buyerId) return res.json({ success: false, message: "Please log in" });
 
-        const buyerId = req.session.buyerId;
-        // Destructure name from req.body (this is what Mongoose says is missing)
-        const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
+    const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
 
-        // 1. Get the current cart for this buyer
-        const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
-
-        if (!cart || cart.items.length === 0) {
-            return res.json({ success: false, message: "Your cart is empty" });
-        }
-
-        // 2. Create the New Order
-        const newOrder = new Order({
-            buyer: buyerId,
-            name: name,   // <--- THIS IS THE FIX: Explicitly assigning the required 'name'
-            phone,
-            address,
-            deliveryMethod,
-            paymentMethod,
-            notes,
-            deliveryDate,
-            items: cart.items.map(item => ({
-                product: item.product._id,
-                seller: item.product.seller,
-                quantity: item.quantity,
-                price: item.price
-            })),
-            totalPrice: cart.totalPrice,
-            status: "Pending"
-        });
-
-        // 3. Save to Database
-await newOrder.save();
-
-
-// ================================
-// REAL-TIME ORDER NOTIFICATION
-// ================================
-const sellerIds = [...new Set(newOrder.items.map(item => item.seller.toString()))];
-
-sellerIds.forEach(sId => {
-
-  const sellerKey = `Seller_${sId}`;
-  const sellerSocketId = onlineUsers.get(sellerKey);
-
-  if (sellerSocketId) {
-    io.to(sellerSocketId).emit("newOrderNotification", {
-      orderId: newOrder._id,
-      message: "You have a new order!"
-    });
-  }
-
-});
-
-
-// 4. Clear the cart after successful order
-await Cart.findOneAndDelete({ buyer: buyerId });
-
-        res.json({
-            success: true,
-            message: "Order placed successfully!",
-            orderId: newOrder._id
-        });
-
-    } catch (error) {
-        console.error("Order Error:", error);
-        res.status(500).json({ 
-            success: false, 
-            message: "Failed to place order", 
-            error: error.message 
-        });
+    // 1. Fetch Cart
+    const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
+    if (!cart || cart.items.length === 0) {
+      return res.json({ success: false, message: "Cart is empty" });
     }
+
+    // 2. Prepare Order Items
+    const orderItems = cart.items.map(item => ({
+      product: item.product._id,
+      seller: item.product.seller,
+      quantity: item.quantity,
+      price: item.price
+    }));
+
+    // 3. Create Order using your schema fields
+    const newOrder = await Order.create({
+      buyer: buyerId,
+      items: orderItems,
+      totalPrice: cart.totalPrice,
+      name,
+      phone,
+      address,
+      deliveryMethod,
+      paymentMethod,
+      notes,
+      // Only include date if it's actually provided
+      deliveryDate: deliveryDate || null, 
+      paymentProof: req.file ? req.file.path : "",
+      status: "Pending"
+    });
+
+    // 4. Notify Sellers via Socket
+    const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
+    uniqueSellers.forEach(sellerId => {
+      const socketId = onlineUsers.get(`Seller_${sellerId}`);
+      if (socketId) {
+        io.to(socketId).emit("newOrderNotification", {
+          message: `New Order from ${name}!`,
+          orderId: newOrder._id
+        });
+      }
+    });
+
+    // 5. Cleanup
+    await Cart.findOneAndDelete({ buyer: buyerId });
+
+    res.json({ success: true, message: "Order placed!", orderId: newOrder._id });
+
+  } catch (error) {
+    console.error("Order Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
+
 
 app.get("/api/seller/orders", async (req, res) => {
   try {
