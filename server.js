@@ -1497,29 +1497,33 @@ app.get("/api/cart/count", async (req,res)=>{
    res.status(500).json({success:false});
  }
 });
+// ==========================================
+// 📦 ORDER MANAGEMENT ROUTES
+// ==========================================
 
+// 1. PLACE ORDER (Buyer)
 app.post("/api/order", upload.single("paymentProof"), async (req, res) => {
   try {
     const buyerId = req.session.buyerId;
-    if (!buyerId) return res.json({ success: false, message: "Please log in" });
+    if (!buyerId) return res.status(401).json({ success: false, message: "Please log in" });
 
     const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
 
-    // 1. Fetch Cart
+    // Fetch the buyer's current cart
     const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
-      return res.json({ success: false, message: "Cart is empty" });
+      return res.status(400).json({ success: false, message: "Cart is empty" });
     }
 
-    // 2. Prepare Order Items
+    // Map cart items to the Order schema format
     const orderItems = cart.items.map(item => ({
       product: item.product._id,
-      seller: item.product.seller,
+      seller: item.product.seller, // Assumes Product model has a 'seller' field
       quantity: item.quantity,
       price: item.price
     }));
 
-    // 3. Create Order using your schema fields
+    // Create the order
     const newOrder = await Order.create({
       buyer: buyerId,
       items: orderItems,
@@ -1528,84 +1532,71 @@ app.post("/api/order", upload.single("paymentProof"), async (req, res) => {
       phone,
       address,
       deliveryMethod,
+      deliveryDate: deliveryDate || null,
       paymentMethod,
+      paymentProof: req.file ? req.file.path : "", // Uses your Cloudinary/Multer setup
       notes,
-      // Only include date if it's actually provided
-      deliveryDate: deliveryDate || null, 
-      paymentProof: req.file ? req.file.path : "",
       status: "Pending"
     });
 
-    // 4. Notify Sellers via Socket
+    // Notify involved sellers via Socket.io
     const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
     uniqueSellers.forEach(sellerId => {
-      const socketId = onlineUsers.get(`Seller_${sellerId}`);
-      if (socketId) {
-        io.to(socketId).emit("newOrderNotification", {
+      const sellerKey = `Seller_${sellerId}`;
+      const sellerSocketId = onlineUsers.get(sellerKey);
+      if (sellerSocketId) {
+        io.to(sellerSocketId).emit("newOrderNotification", {
           message: `New Order from ${name}!`,
-          orderId: newOrder._id
+          orderId: newOrder._id,
+          total: cart.totalPrice
         });
       }
     });
 
-    // 5. Cleanup
+    // Clear the cart after successful order
     await Cart.findOneAndDelete({ buyer: buyerId });
 
-    res.json({ success: true, message: "Order placed!", orderId: newOrder._id });
-
+    res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
   } catch (error) {
-    console.error("Order Error:", error);
+    console.error("Order Creation Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
-
+// 2. GET SELLER ORDERS
 app.get("/api/seller/orders", async (req, res) => {
   try {
-    if (!req.session.sellerId) {
-      return res.status(401).json({ success: false, message: "Seller Not Logged In" });
-    }
+    const sellerId = req.session.sellerId;
+    if (!sellerId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
     // Find orders where at least one item belongs to this seller
-    // We populate 'buyer' to get name/phone and 'items.product' for product details
-    const orders = await Order.find({ "items.seller": req.session.sellerId })
-      .populate("buyer", "name phone")
+    const orders = await Order.find({ "items.seller": sellerId })
       .populate("items.product", "name")
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      orders
-    });
-  } catch (error) {
-    console.error("Fetch Orders Error:", error);
-    res.status(500).json({ success: false, message: "Error fetching orders" });
+    res.json({ success: true, orders });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 });
 
-app.post("/api/place_order", async (req, res) => {
+// 3. UPDATE ORDER STATUS (Seller)
+app.put("/api/order/status/:id", async (req, res) => {
   try {
-    // ... your existing order creation logic ...
-    const order = await Order.create({ ...req.body });
+    const { status } = req.body; // "Processing", "Shipped", etc.
+    const orderId = req.params.id;
 
-    // 1. Group items by seller (in case of multiple sellers)
-    const sellerIds = [...new Set(order.items.map(item => item.seller.toString()))];
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      { status },
+      { new: true }
+    );
 
-    // 2. Notify each seller involved in the order
-    sellerIds.forEach(sId => {
-      const sellerKey = `Seller_${sId}`;
-      const sellerSocketId = onlineUsers.get(sellerKey);
+    if (!updatedOrder) return res.status(404).json({ success: false });
 
-      if (sellerSocketId) {
-        io.to(sellerSocketId).emit("newOrderNotification", {
-          orderId: order._id,
-          message: "You have a new order!"
-        });
-      }
-    });
-
-    res.json({ success: true, order });
-  } catch (error) {
+    res.json({ success: true, message: `Order marked as ${status}` });
+  } catch (err) {
     res.status(500).json({ success: false });
   }
 });
