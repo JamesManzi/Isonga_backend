@@ -1869,6 +1869,34 @@ res.json({success:false});
 }
 
 });
+
+app.delete("/api/cart/remove/:id", async (req, res) => {
+  try {
+    const buyerId = req.session.buyerId;
+    const identifier = req.params.id;
+
+    const cart = await Cart.findOne({ buyer: buyerId });
+    if (!cart) return res.status(404).json({ success: false });
+
+    // This logic removes the item if the ID matches 
+    // EITHER the product ID OR the specific cart item ID
+    cart.items = cart.items.filter(item => {
+      return item._id.toString() !== identifier && 
+             (item.product ? item.product.toString() !== identifier : true);
+    });
+
+    // Recalculate total price safely
+    cart.totalPrice = cart.items.reduce((acc, item) => {
+      return acc + (item.price * item.quantity);
+    }, 0);
+
+    await cart.save();
+    res.json({ success: true, message: "Item removed" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false });
+  }
+});
 // START SERVER
 // ==============================
 const PORT = process.env.PORT || 10000;
