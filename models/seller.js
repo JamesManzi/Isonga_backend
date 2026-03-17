@@ -16,7 +16,6 @@ const sellerSchema = new mongoose.Schema({
         required: true
     }
 });
-
 //  Add a text index for full-text search
 sellerSchema.index({ name: "text", category: "text", location: "text", description: "text" });
 

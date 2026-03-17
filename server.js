@@ -32,7 +32,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Store Uploads
 const { upload } = require('./cloudinary');
-
 // Session Configure
 app.set("trust proxy", 1); // Help Https Work Well
 app.use(session({
@@ -349,7 +348,7 @@ app.get("/api/dashboard", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false,message:"Dashboard Internal Server Error" });
   }
 });
 
@@ -369,7 +368,7 @@ app.get("/api/my_store",async(req,res)=>{
     })
  } catch (error) {
     console.log(error);
-    res.status(500).json({success:false,message:"My Store Error"});
+    res.status(500).json({success:false,message:"My Store Server Error"});
  }
 })
 
@@ -408,7 +407,7 @@ app.get("/api/seller_profile", async (req, res) => {
     });
   } catch (err) {
     console.log(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Seller_Profile Server error" });
   }
 });
 app.get("/api/buyer_dashboard", async (req, res) => {
@@ -448,7 +447,7 @@ app.get("/api/buyer_dashboard", async (req, res) => {
 
   } catch (error) {
     console.log(error);
-    res.status(500).json({ success: false, message: "Buyer Dashboard Error" });
+    res.status(500).json({ success: false, message: "Buyer Dashboard Server Error" });
   }
 });
 
@@ -487,7 +486,7 @@ app.get("/api/view_profile/:id", async (req, res) => {
 
   } catch (error) {
     console.log(error);
-    res.status(500).json({ success: false, message: "View Profile Error" });
+    res.status(500).json({ success: false, message: "View Profile Server Error" });
   }
 });
 
@@ -509,7 +508,7 @@ app.get("/api/view_products/:id",async(req,res)=>{
         })
     } catch (error) {
         console.log(error);
-        return res.status(500).json({success:false,message:"View Products Error"});
+        return res.status(500).json({success:false,message:"View Products Server Error"});
     }
 })
 
@@ -531,7 +530,7 @@ app.get("/api/Service_Products/:id",async(req,res)=>{
         })
     } catch (error) {
         console.log(error);
-        return res.status(500).json({success:false,message:"View Products Error"});
+        return res.status(500).json({success:false,message:"View Products Server Error"});
     }
 })
 
@@ -1708,14 +1707,26 @@ app.post("/api/bookService", upload.single("paymentProof"), async (req, res) => 
       bookingData.paymentScreenshot = req.file.path; 
     }
 
-    // 5. Save to Database
     const newBooking = await Booking.create(bookingData);
 
-    res.json({
-      success: true,
-      message: "Booking Sent Successfully!",
-      booking: newBooking
-    });
+//  SEND REAL-TIME NOTIFICATION TO SELLER
+const sellerKey = `Seller_${productData.seller}`;
+const sellerSocketId = onlineUsers.get(sellerKey);
+
+if (sellerSocketId) {
+  io.to(sellerSocketId).emit("newBookingNotification", {
+    message: `New Booking from ${name}!`,
+    bookingId: newBooking._id,
+    date,
+    time
+  });
+}
+
+res.json({
+  success: true,
+  message: "Booking Sent Successfully!",
+  booking: newBooking
+});
 
   } catch (error) {
     console.error("Booking Route Error:", error);
