@@ -56,7 +56,7 @@ const OrderSchema = new mongoose.Schema(
       trim: true
     },
 
-    // 🚚 Delivery
+    //  Delivery
     deliveryMethod: {
       type: String,
       enum: ["standard", "express", "pickup"],
@@ -67,14 +67,14 @@ const OrderSchema = new mongoose.Schema(
       type: Date
     },
 
-    // 💳 Payment
+    //  Payment
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile", "card"],
       default: "cash"
     },
 
-    // 📸 NEW: Payment proof image
+    //  NEW: Payment proof image
     paymentProof: {
       type: String, // store file path
       default: ""
@@ -85,7 +85,7 @@ const OrderSchema = new mongoose.Schema(
       default: ""
     },
 
-    // 📦 Status
+    //  Status
     status: {
       type: String,
       enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"],

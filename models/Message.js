@@ -36,7 +36,7 @@ const messageSchema = new mongoose.Schema(
   default: ""
 },
 
-  // ⭐ ADD THIS
+  
   read: {
     type: Boolean,
     default: false

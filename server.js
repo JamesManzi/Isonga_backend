@@ -718,7 +718,7 @@ app.put("/api/seller_profile",
       };
 
       // =============================
-      // ✅ DELETE OLD PROFILE IMAGE
+      //  DELETE OLD PROFILE IMAGE
       // =============================
       if (req.files["profileImage"]) {
 
@@ -733,7 +733,7 @@ app.put("/api/seller_profile",
       }
 
       // =============================
-      // ✅ APPEND LOCATION IMAGES
+      // APPEND LOCATION IMAGES
       // =============================
       if (req.files["files"]) {
 
@@ -1498,7 +1498,7 @@ app.get("/api/cart/count", async (req,res)=>{
  }
 });
 // ==========================================
-// 📦 ORDER MANAGEMENT ROUTES
+//  ORDER MANAGEMENT ROUTES
 // ==========================================
 
 // 1. PLACE ORDER (Buyer)
