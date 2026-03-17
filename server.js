@@ -34,7 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 const { upload } = require('./cloudinary');
 
 // Session Configure
-app.set("trust proxy", 1);
+app.set("trust proxy", 1); // Help Https Work Well
 app.use(session({
     name:"isonga.sid",
     secret:process.env.SESSION_SECRET,
