@@ -335,7 +335,6 @@ const todayViews = todayEntry ? todayEntry.buyers.length : 0;
       success: true,
       seller: {
         ...seller.toObject(),
-        totalSales,
         totalOrders: totalActivityCount, // This maps to "Bookings" in your frontend if type is Service
         newOrders: newActivityCount,
         averageRating: Number(averageRating.toFixed(1)), 
