@@ -332,7 +332,18 @@ app.get("/api/dashboard", async (req, res) => {
 
     // 4. Get Views
     const products = await Product.find({ seller: sellerId });
-    const totalViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
+
+const totalViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
+
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const todayViews = products.reduce((sum, p) => {
+  const todayData = p.dailyViews.find(
+    d => new Date(d.date).getTime() === today.getTime()
+  );
+  return sum + (todayData ? todayData.buyers.length : 0);
+}, 0);
 
     res.json({
       success: true,
@@ -344,7 +355,8 @@ app.get("/api/dashboard", async (req, res) => {
         averageRating: Number(averageRating.toFixed(1)), 
         numReviews: numReviews
       },
-      totalViews
+      totalViews,
+      todayViews
     });
   } catch (err) {
     console.error(err);
@@ -832,15 +844,15 @@ io.on("connection", (socket) => {
   // =========================
   socket.on("userOnline", ({ userId, userModel }) => {
 
-    if (!userId || !userModel) return;
+  if (!userId || !userModel) return;
 
-    const key = `${userModel}_${userId}`;
+  const key = `${userModel}_${userId}`;
 
-    onlineUsers.set(key, socket.id);
-    socket.userKey = key;
+  onlineUsers.set(key, socket.id);
 
-    console.log("Online Users:", Array.from(onlineUsers.keys()));
-  });
+  socket.join(key); // ✅ IMPORTANT
+
+});
 
 
   // =========================
@@ -1228,27 +1240,82 @@ app.get("/api/product/view/:id", async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid ID" });
     }
 
-    // 1. Find product and increment total views
-    const product = await Product.findByIdAndUpdate(
-      productId,
-      { $inc: { views: 1 } },
-      { new: true }
-    ).populate("seller", "name profile location phone description");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
+    // 1. Find product
+    const product = await Product.findById(productId).populate("seller");
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    // 2. Track Unique Buyers (if logged in)
-    if (buyerId && !product.uniqueBuyers.includes(buyerId)) {
-      product.uniqueBuyers.push(buyerId);
-      await product.save();
+    // 2. TOTAL VIEWS (always increase)
+    product.views += 1;
+
+    // 3. DAILY UNIQUE VIEWS
+    let todayEntry = product.dailyViews.find(
+      d => new Date(d.date).getTime() === today.getTime()
+    );
+
+    if (!todayEntry) {
+      // Create today entry
+      todayEntry = {
+        date: today,
+        buyers: []
+      };
+      product.dailyViews.push(todayEntry);
     }
 
-    res.json({ success: true, product });
+    // 4. Add buyer only once per day
+    if (buyerId && !todayEntry.buyers.includes(buyerId)) {
+      todayEntry.buyers.push(buyerId);
+    }
+
+    // 5. Track unique buyers overall
+    if (buyerId && !product.uniqueBuyers.includes(buyerId)) {
+      product.uniqueBuyers.push(buyerId);
+    }
+
+    await product.save();
+
+    // ===============================
+    // 🔥 REAL-TIME SELLER UPDATE
+    // ===============================
+
+    const sellerId = product.seller._id.toString();
+
+    const sellerProducts = await Product.find({ seller: sellerId });
+
+    const totalViews = sellerProducts.reduce(
+      (sum, p) => sum + (p.views || 0),
+      0
+    );
+
+    const todayViews = sellerProducts.reduce((sum, p) => {
+      const todayData = p.dailyViews.find(
+        d => new Date(d.date).getTime() === today.getTime()
+      );
+      return sum + (todayData ? todayData.buyers.length : 0);
+    }, 0);
+
+    const sellerKey = `Seller_${sellerId}`;
+    const sellerSocketId = onlineUsers.get(sellerKey);
+
+    if (sellerSocketId) {
+      io.to(sellerSocketId).emit("newView", {
+        totalViews,
+        todayViews
+      });
+    }
+
+    res.json({
+      success: true,
+      product
+    });
+
   } catch (error) {
     console.error("View Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    res.status(500).json({ success: false });
   }
 });
 
