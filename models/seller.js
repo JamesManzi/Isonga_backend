@@ -14,7 +14,14 @@ const sellerSchema = new mongoose.Schema({
        type: String,
         enum: ["Product", "Service", "Asset"],
         required: true
+    },
+    views: { type: Number, default: 0 }, // Total store visits ever
+  dailyViews: [
+    {
+      date: { type: Date, default: () => new Date().setHours(0, 0, 0, 0) },
+      buyers: [{ type: mongoose.Schema.Types.ObjectId, ref: "Buyer" }]
     }
+  ]
 });
 //  Add a text index for full-text search
 sellerSchema.index({ name: "text", category: "text", location: "text", description: "text" });

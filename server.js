@@ -1231,90 +1231,61 @@ app.get("/api/buyer/conversations", async (req, res) => {
   }
 });
 
-app.get("/api/product/view/:id", async (req, res) => {
+app.post("/api/products/view/:id", async (req, res) => {
   try {
     const productId = req.params.id;
     const buyerId = req.session.buyerId;
 
-    if (!mongoose.Types.ObjectId.isValid(productId)) {
-      return res.status(400).json({ success: false, message: "Invalid ID" });
-    }
+    // 1. If no buyer is logged in, we might still want to count it, 
+    // but for "once per buyer," we need the ID.
+    if (!buyerId) return res.json({ success: false, message: "Guest view not tracked" });
 
+    // 2. Get today's date at midnight (consistent with your Schema default)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Find product
-    const product = await Product.findById(productId).populate("seller");
-    if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
+    const product = await Product.findById(productId);
+    if (!product) return res.json({ success: false });
 
-    // 2. TOTAL VIEWS (always increase)
-    product.views += 1;
-
-    // 3. DAILY UNIQUE VIEWS
+    // 3. Find today's entry in dailyViews
     let todayEntry = product.dailyViews.find(
-      d => new Date(d.date).getTime() === today.getTime()
+      (d) => new Date(d.date).getTime() === today.getTime()
     );
 
     if (!todayEntry) {
-      // Create today entry
-      todayEntry = {
-        date: today,
-        buyers: []
-      };
-      product.dailyViews.push(todayEntry);
-    }
-
-    // 4. Add buyer only once per day
-    if (buyerId && !todayEntry.buyers.includes(buyerId)) {
-      todayEntry.buyers.push(buyerId);
-    }
-
-    // 5. Track unique buyers overall
-    if (buyerId && !product.uniqueBuyers.includes(buyerId)) {
-      product.uniqueBuyers.push(buyerId);
+      // If today doesn't exist yet, create it and add this buyer
+      product.dailyViews.push({ date: today, buyers: [buyerId] });
+      product.views += 1;
+    } else {
+      // If today exists, check if THIS buyer has already viewed it
+      const hasViewed = todayEntry.buyers.includes(buyerId);
+      
+      if (!hasViewed) {
+        todayEntry.buyers.push(buyerId);
+        product.views += 1;
+      } else {
+        // Buyer already viewed today - do nothing!
+        return res.json({ success: true, message: "Already counted today" });
+      }
     }
 
     await product.save();
 
-    // ===============================
-    // 🔥 REAL-TIME SELLER UPDATE
-    // ===============================
-
-    const sellerId = product.seller._id.toString();
-
-    const sellerProducts = await Product.find({ seller: sellerId });
-
-    const totalViews = sellerProducts.reduce(
-      (sum, p) => sum + (p.views || 0),
-      0
-    );
-
-    const todayViews = sellerProducts.reduce((sum, p) => {
-      const todayData = p.dailyViews.find(
-        d => new Date(d.date).getTime() === today.getTime()
-      );
-      return sum + (todayData ? todayData.buyers.length : 0);
-    }, 0);
-
-    const sellerKey = `Seller_${sellerId}`;
-    const sellerSocketId = onlineUsers.get(sellerKey);
-
-    if (sellerSocketId) {
-      io.to(sellerSocketId).emit("newView", {
-        totalViews,
-        todayViews
+    // 4. Emit real-time update to the seller's dashboard
+    const sellerKey = `Seller_${product.seller}`;
+    const sellerSocket = onlineUsers.get(sellerKey);
+    if (sellerSocket) {
+      // Calculate today's specific views for the socket update
+      const updatedTodayViews = todayEntry ? todayEntry.buyers.length : 1;
+      io.to(sellerSocket).emit("newView", {
+        totalViews: product.views,
+        todayViews: updatedTodayViews
       });
     }
 
-    res.json({
-      success: true,
-      product
-    });
-
+    res.json({ success: true, totalViews: product.views });
   } catch (error) {
-    console.error("View Error:", error);
+    console.error("View Count Error:", error);
     res.status(500).json({ success: false });
   }
 });
@@ -1960,6 +1931,47 @@ app.post("/api/seller/mark-activity-read", async (req, res) => {
 
   } catch (error) {
     console.log(error);
+    res.status(500).json({ success: false });
+  }
+});
+
+app.post("/api/seller/view/:id", async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    const buyerId = req.session.buyerId;
+
+    if (!buyerId) return res.json({ success: false, message: "Guest view" });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const seller = await Seller.findById(sellerId);
+    if (!seller) return res.json({ success: false });
+
+    // Check if there is an entry for today's date
+    let todayEntry = seller.dailyViews.find(
+      (d) => new Date(d.date).getTime() === today.getTime()
+    );
+
+    if (!todayEntry) {
+      // First visitor of the day
+      seller.dailyViews.push({ date: today, buyers: [buyerId] });
+      seller.views += 1;
+    } else {
+      // Check if THIS buyer has already been counted today
+      const hasViewed = todayEntry.buyers.includes(buyerId);
+      if (!hasViewed) {
+        todayEntry.buyers.push(buyerId);
+        seller.views += 1;
+      } else {
+        // Already counted this buyer today - do nothing
+        return res.json({ success: true, message: "Already visited today" });
+      }
+    }
+
+    await seller.save();
+    res.json({ success: true });
+  } catch (error) {
     res.status(500).json({ success: false });
   }
 });
