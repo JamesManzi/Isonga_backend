@@ -1,4 +1,4 @@
-const dns = require('node:dns');
+  const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
 const express=require("express");
 const mongoose=require("mongoose");
@@ -80,7 +80,7 @@ if (req.files && req.files.profile && req.files.profile.length > 0) {
 }
 
     let files=[];
-    if(req.files&&req.files.files){
+    if(req.files&&req.files.files&&req.files.files>2){
          files = req.files.files.map(file => file.path);
     }
 
@@ -99,7 +99,7 @@ if (!rule.test(password)) {
 }
 
     if(password!==repeat_pass){
-        return res.json({success:false,message:"Password Must Much"});
+        return res.json({success:false,message:"Password Must Match"});
     }
     const hash=await bcrypt.hash(password,12);
 
@@ -319,31 +319,17 @@ app.get("/api/dashboard", async (req, res) => {
       newActivityCount = await Order.countDocuments({ "items.seller": sellerId, status: "Pending" });
     }
 
-    // 3. Calculate Total Sales (Revenue)
-    const orders = await Order.find({ "items.seller": sellerId });
-    let totalSales = 0;
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        if (item.seller.toString() === sellerId.toString()) {
-          totalSales += (item.price * item.quantity);
-        }
-      });
-    });
-
     // 4. Get Views
-    const products = await Product.find({ seller: sellerId });
-
-const totalViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
+    const totalViews = seller.views || 0;
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
 
-const todayViews = products.reduce((sum, p) => {
-  const todayData = p.dailyViews.find(
-    d => new Date(d.date).getTime() === today.getTime()
-  );
-  return sum + (todayData ? todayData.buyers.length : 0);
-}, 0);
+const todayEntry = seller.dailyViews.find(
+  d => new Date(d.date).getTime() === today.getTime()
+);
+
+const todayViews = todayEntry ? todayEntry.buyers.length : 0;
 
     res.json({
       success: true,
@@ -1231,65 +1217,6 @@ app.get("/api/buyer/conversations", async (req, res) => {
   }
 });
 
-app.post("/api/products/view/:id", async (req, res) => {
-  try {
-    const productId = req.params.id;
-    const buyerId = req.session.buyerId;
-
-    // 1. If no buyer is logged in, we might still want to count it, 
-    // but for "once per buyer," we need the ID.
-    if (!buyerId) return res.json({ success: false, message: "Guest view not tracked" });
-
-    // 2. Get today's date at midnight (consistent with your Schema default)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const product = await Product.findById(productId);
-    if (!product) return res.json({ success: false });
-
-    // 3. Find today's entry in dailyViews
-    let todayEntry = product.dailyViews.find(
-      (d) => new Date(d.date).getTime() === today.getTime()
-    );
-
-    if (!todayEntry) {
-      // If today doesn't exist yet, create it and add this buyer
-      product.dailyViews.push({ date: today, buyers: [buyerId] });
-      product.views += 1;
-    } else {
-      // If today exists, check if THIS buyer has already viewed it
-      const hasViewed = todayEntry.buyers.includes(buyerId);
-      
-      if (!hasViewed) {
-        todayEntry.buyers.push(buyerId);
-        product.views += 1;
-      } else {
-        // Buyer already viewed today - do nothing!
-        return res.json({ success: true, message: "Already counted today" });
-      }
-    }
-
-    await product.save();
-
-    // 4. Emit real-time update to the seller's dashboard
-    const sellerKey = `Seller_${product.seller}`;
-    const sellerSocket = onlineUsers.get(sellerKey);
-    if (sellerSocket) {
-      // Calculate today's specific views for the socket update
-      const updatedTodayViews = todayEntry ? todayEntry.buyers.length : 1;
-      io.to(sellerSocket).emit("newView", {
-        totalViews: product.views,
-        todayViews: updatedTodayViews
-      });
-    }
-
-    res.json({ success: true, totalViews: product.views });
-  } catch (error) {
-    console.error("View Count Error:", error);
-    res.status(500).json({ success: false });
-  }
-});
-
 app.post("/api/rate_seller/:sellerId", async (req, res) => {
   try {
     if (!req.session.buyerId) return res.json({ success: false });
@@ -1970,6 +1897,19 @@ app.post("/api/seller/view/:id", async (req, res) => {
     }
 
     await seller.save();
+    const sellerKey = `Seller_${sellerId}`;
+const sellerSocket = onlineUsers.get(sellerKey);
+
+if (sellerSocket) {
+  const todayEntry = seller.dailyViews.find(
+    d => new Date(d.date).getTime() === today.getTime()
+  );
+
+  io.to(sellerSocket).emit("newView", {
+    totalViews: seller.views,
+    todayViews: todayEntry ? todayEntry.buyers.length : 0
+  });
+}
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false });
