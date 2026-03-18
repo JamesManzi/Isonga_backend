@@ -298,6 +298,11 @@ app.get("/api/dashboard", async (req, res) => {
     const seller = await Seller.findById(sellerId);
     if (!seller) return res.json({ success: false, message: "Seller not found" });
 
+    const totalItemsCount = await Product.countDocuments({ 
+      seller: sellerId,
+      type: seller.sellerType // Matches "Product", "Service", or "Asset"
+    });
+
     // 1. Calculate Ratings
     const ratings = await Rating.find({ seller: sellerId });
     const numReviews = ratings.length;
@@ -338,7 +343,8 @@ const todayViews = todayEntry ? todayEntry.buyers.length : 0;
         totalOrders: totalActivityCount, // This maps to "Bookings" in your frontend if type is Service
         newOrders: newActivityCount,
         averageRating: Number(averageRating.toFixed(1)), 
-        numReviews: numReviews
+        numReviews: numReviews,
+        totalItemsCount: totalItemsCount
       },
       totalViews,
       todayViews
