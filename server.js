@@ -1550,6 +1550,37 @@ app.get("/api/seller/orders", async (req, res) => {
   }
 });
 
+// --- Update Order Status (Accept/Decline) ---
+app.put("/api/order/status/:orderId", async (req, res) => {
+  try {
+    // 1. Check if Seller is logged in
+    const sellerId = req.session.sellerId;
+    if (!sellerId) {
+      return res.status(401).json({ success: false, message: "Not Logged In" });
+    }
+
+    const { orderId } = req.params;
+    const { status } = req.body; // "Accepted" or "Cancelled"
+
+    // 2. Find the order and update it
+    // Note: We use findOneAndUpdate to ensure the seller actually owns this order
+    const updatedOrder = await Order.findOneAndUpdate(
+      { _id: orderId, "items.seller": sellerId }, 
+      { $set: { status: status } },
+      { new: true }
+    );
+
+    if (!updatedOrder) {
+      return res.status(404).json({ success: false, message: "Order not found or unauthorized" });
+    }
+
+    res.json({ success: true, message: `Order ${status} successfully`, updatedOrder });
+  } catch (error) {
+    console.error("Order Status Update Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
 app.put("/api/order/status/:id", async (req, res) => {
   try {
     const sellerId = req.session.sellerId;
