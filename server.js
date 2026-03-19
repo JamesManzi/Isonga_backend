@@ -1550,22 +1550,70 @@ app.get("/api/seller/orders", async (req, res) => {
   }
 });
 
-// 3. UPDATE ORDER STATUS (Seller)
 app.put("/api/order/status/:id", async (req, res) => {
   try {
-    const { status } = req.body; // "Processing", "Shipped", etc.
+    const sellerId = req.session.sellerId;
+    if (!sellerId) {
+      return res.status(401).json({ success: false, message: "Not authorized" });
+    }
+
+    const { status } = req.body;
     const orderId = req.params.id;
 
-    const updatedOrder = await Order.findByIdAndUpdate(
-      orderId,
-      { status },
-      { new: true }
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // ✅ Check if this seller owns at least one item in the order
+    const isSellerOwner = order.items.some(
+      item => item.seller.toString() === sellerId
     );
 
-    if (!updatedOrder) return res.status(404).json({ success: false });
+    if (!isSellerOwner) {
+      return res.status(403).json({ success: false, message: "Not your order" });
+    }
 
-    res.json({ success: true, message: `Order marked as ${status}` });
+    // ✅ Prevent re-updating
+    if (order.status !== "Pending") {
+      return res.json({
+        success: false,
+        message: "Order already handled"
+      });
+    }
+
+    // ✅ Allow only valid actions
+    const allowedStatuses = ["Accepted", "Cancelled"];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.json({
+        success: false,
+        message: "Invalid status"
+      });
+    }
+
+    order.status = status;
+    await order.save();
+
+    // 🔥 REAL-TIME UPDATE TO BUYER
+    const buyerKey = `Buyer_${order.buyer}`;
+    const buyerSocket = onlineUsers.get(buyerKey);
+
+    if (buyerSocket) {
+      io.to(buyerSocket).emit("orderStatusUpdated", {
+        orderId: order._id,
+        status: order.status
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Order ${status}`
+    });
+
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false });
   }
 });
