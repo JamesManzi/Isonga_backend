@@ -90,7 +90,11 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"],
       default: "Pending"
-    }
+    },
+    seen: {
+  type: Boolean,
+  default: false
+}
   },
   { timestamps: true }
 );
