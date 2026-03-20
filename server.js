@@ -17,7 +17,8 @@ const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 const path = require("path");
 const Booking=require("./models/booking");
-
+const crypto = require('crypto');
+const sendEmail = require('./utils/sendEmail');
 // Creating App
 const app=express();
 //Cross Origin Configure
@@ -107,7 +108,7 @@ if (!rule.test(password)) {
     if(!phoneRule.test(phone)){
   return res.json({success:false,message:"Invalid Phone Number"});
 }
-
+const verificationToken = crypto.randomBytes(32).toString('hex');
     await Seller.create({
         name,
         location,
@@ -118,10 +119,18 @@ if (!rule.test(password)) {
         files,
         profile,
         category,
-        sellerType
+        sellerType,
+        verificationToken, // Save this
+    isVerified: false
 
     })
+const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
 
+await sendEmail(
+    email, 
+    "Verify your Isonga Seller Account", 
+    `<h1>Welcome ${name}!</h1><p>Click <a href="${verificationLink}">here</a> to verify your account.</p>`
+);
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -131,6 +140,33 @@ if (!rule.test(password)) {
         return res.status(500).json({success:false,message:"Register Error"})
     }
 })
+
+app.get("/api/verify/:model/:id/:token", async (req, res) => {
+  try {
+    const { model, id, token } = req.params;
+    
+    // Choose which model to look in
+    const TargetModel = model === "Seller" ? Seller : Buyer;
+    
+    const user = await TargetModel.findById(id);
+    if (!user) return res.status(400).send("User not found.");
+
+    if (user.verificationToken !== token) {
+      return res.status(400).send("Invalid or expired token.");
+    }
+
+    // Success! Update the user
+    user.isVerified = true;
+    user.verificationToken = undefined;
+    await user.save();
+
+    // Redirect them back to your Vercel frontend
+    res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 app.post("/api/login",async(req,res)=>{
     try {
@@ -151,7 +187,13 @@ app.post("/api/login",async(req,res)=>{
       message:"Email and Password required"
    })
 }
-
+   // ... inside /api/login after checking password compare
+if (!UserSeller.isVerified) {
+    return res.json({ 
+        success: false, 
+        message: "Your email is not verified. Please check your inbox." 
+    });
+}
     req.session.sellerId=UserSeller._id;
    const SellerData={
         id:UserSeller._id,

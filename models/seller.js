@@ -15,6 +15,13 @@ const sellerSchema = new mongoose.Schema({
         enum: ["Product", "Service", "Asset"],
         required: true
     },
+    isVerified: { 
+        type: Boolean, 
+        default: false 
+    },
+    verificationToken: { 
+        type: String 
+    },
     views: { type: Number, default: 0 }, // Total store visits ever
   dailyViews: [
     {
