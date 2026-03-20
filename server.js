@@ -236,14 +236,22 @@ if (!rule.test(password)) {
     if(req.file){
         profile=req.file.path;
     }
-
+const verificationToken = crypto.randomBytes(32).toString('hex');
     await Buyer.create({
         name,
         email,
         password:hash,
-        profile
+        profile,
+        verificationToken, // Save this
+    isVerified: false
     })
+const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
 
+await sendEmail(
+    email, 
+    "Verify your Isonga Seller Account", 
+    `<h1>Welcome ${name}!</h1><p>Click <a href="${verificationLink}">here</a> to verify your account.</p>`
+);
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -272,6 +280,13 @@ app.post("/api/buyer_login",async(req,res)=>{
       success:false,
       message:"Email and Password required"
    })
+}
+
+if (!UserSeller.isVerified) {
+    return res.json({ 
+        success: false, 
+        message: "Your email is not verified. Please check your inbox." 
+    });
 }
     req.session.buyerId=UserBuyer._id;
     const BuyerData={
