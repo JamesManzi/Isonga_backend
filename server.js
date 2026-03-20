@@ -1752,56 +1752,56 @@ res.json({
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-// GET: Fetch all bookings for a specific seller
+
+
+// ==========================================
+// BOOKING SYSTEM ROUTES
+// ==========================================
+
+// 1. GET all bookings for a specific seller
 app.get("/api/seller/bookings", async (req, res) => {
   try {
-    // 1. Verify seller session
-    if (!req.session.sellerId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
+    const sellerId = req.session.sellerId;
+    if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
 
-    // 2. Find bookings where the seller ID matches the session
-    // We populate 'product' to see what service was booked
-    const bookings = await Booking.find({ seller: req.session.sellerId })
-      .populate("product", "name price")
+    // We populate 'product' to show the Service Name on the frontend
+    const bookings = await Booking.find({ seller: sellerId })
+      .populate("product", "name") 
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      bookings
-    });
+    res.json({ success: true, bookings });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: "Error fetching bookings" });
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
-// PUT: Update booking status (Approve/Reject/Complete)
+// 2. UPDATE booking status
 app.put("/api/bookings/:id", async (req, res) => {
   try {
-    if (!req.session.sellerId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
+    const { id } = req.params;
     const { status } = req.body;
-    const bookingId = req.params.id;
+    const sellerId = req.session.sellerId;
 
-    // Optional: Security check to ensure this booking belongs to this seller
-    const booking = await Booking.findById(bookingId);
-    if (!booking || booking.seller.toString() !== req.session.sellerId) {
-      return res.status(403).json({ success: false, message: "Permission denied" });
+    if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
+
+    // Validate status against your Schema Enum
+    const validStatuses = ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"];
+    if (!validStatuses.includes(status)) {
+      return res.json({ success: false, message: "Invalid status type" });
     }
 
-    booking.status = status;
-    await booking.save();
+    const updatedBooking = await Booking.findOneAndUpdate(
+      { _id: id, seller: sellerId },
+      { status, seen: true }, // Mark as seen when seller interacts
+      { new: true }
+    );
 
-    res.json({
-      success: true,
-      message: `Booking ${status} successfully`
-    });
+    if (!updatedBooking) return res.json({ success: false, message: "Booking not found" });
+
+    res.json({ success: true, booking: updatedBooking });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Update failed" });
+    res.status(500).json({ success: false, message: "Update Error" });
   }
 });
 
