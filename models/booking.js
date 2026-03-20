@@ -41,10 +41,10 @@ const bookingSchema = new mongoose.Schema({
     trim: true
   },
   status: {
-    type: String,
-    enum: ["Pending", "Confirmed", "Completed", "Cancelled"],
-    default: "Pending"
-  },
+  type: String,
+  enum: ["Pending", "Read", "Confirmed", "Approved", "Rejected", "Completed", "Cancelled"],
+  default: "Pending"
+},
   paymentMethod: { type: String, enum: ["cash", "mobile", "card"], required: true },
 paymentScreenshot: { type: String }, // store Cloudinary URL or file path
   createdAt: {
