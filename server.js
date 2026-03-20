@@ -1753,9 +1753,10 @@ res.json({
   }
 });
 
+// ... existing products/dashboard routes ...
 
 // ==========================================
-// BOOKING SYSTEM ROUTES
+// 🚀 PASTE BOOKING ROUTES HERE
 // ==========================================
 
 // 1. GET all bookings for a specific seller
@@ -1764,7 +1765,7 @@ app.get("/api/seller/bookings", async (req, res) => {
     const sellerId = req.session.sellerId;
     if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
 
-    // We populate 'product' to show the Service Name on the frontend
+    // We fetch everything so the frontend can decide what to show/hide
     const bookings = await Booking.find({ seller: sellerId })
       .populate("product", "name") 
       .sort({ createdAt: -1 });
@@ -1785,7 +1786,6 @@ app.put("/api/bookings/:id", async (req, res) => {
 
     if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
 
-    // Validate status against your Schema Enum
     const validStatuses = ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"];
     if (!validStatuses.includes(status)) {
       return res.json({ success: false, message: "Invalid status type" });
@@ -1793,7 +1793,7 @@ app.put("/api/bookings/:id", async (req, res) => {
 
     const updatedBooking = await Booking.findOneAndUpdate(
       { _id: id, seller: sellerId },
-      { status, seen: true }, // Mark as seen when seller interacts
+      { status, seen: true }, 
       { new: true }
     );
 
