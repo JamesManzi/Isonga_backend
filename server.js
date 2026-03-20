@@ -23,7 +23,7 @@ const sendEmail = require('./utils/sendEmail');
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin: ["https://isonga-frontend.vercel.app"],
+  origin: ["https://isonga-frontend.vercel.app","https:/localhost:5000"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -109,21 +109,20 @@ if (!rule.test(password)) {
   return res.json({success:false,message:"Invalid Phone Number"});
 }
 const verificationToken = crypto.randomBytes(32).toString('hex');
-    await Seller.create({
-        name,
-        location,
-        phone,
-        email,
-        description,
-        password:hash,
-        files,
-        profile,
-        category,
-        sellerType,
-        verificationToken, // Save this
+    const newSeller = await Seller.create({
+    name,
+    location,
+    phone,
+    email,
+    description,
+    password: hash,
+    files,
+    profile,
+    category,
+    sellerType,
+    verificationToken,
     isVerified: false
-
-    })
+});
 const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
 
 await sendEmail(
@@ -237,14 +236,14 @@ if (!rule.test(password)) {
         profile=req.file.path;
     }
 const verificationToken = crypto.randomBytes(32).toString('hex');
-    await Buyer.create({
-        name,
-        email,
-        password:hash,
-        profile,
-        verificationToken, // Save this
+    const newBuyer = await Buyer.create({
+    name,
+    email,
+    password: hash,
+    profile,
+    verificationToken,
     isVerified: false
-    })
+});
 const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
 
 await sendEmail(
