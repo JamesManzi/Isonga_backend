@@ -108,7 +108,7 @@ if (!rule.test(password)) {
     if(!phoneRule.test(phone)){
   return res.json({success:false,message:"Invalid Phone Number"});
 }
-const verificationToken = crypto.randomBytes(32).toString('hex');
+const verificationToken = crypto.randomBytes(32).toString("hex");
    const newSeller = await Seller.create({ name,
      location,
       phone, 
@@ -123,23 +123,22 @@ const verificationToken = crypto.randomBytes(32).toString('hex');
           isVerified: false 
         });
 
-const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
+const link = `${process.env.BASE_URL}/api/verify/${user._id}/${verificationToken}`;
 
-const emailResult = await sendEmail(
-  email,
-  "Verify your Isonga Seller Account",
-  `<h1>Welcome ${name}</h1>
-   <p>Click the link below to verify your account:</p>
-   <a href="${verificationLink}">Verify Email</a>`
-);
+    // 6. send email
+    const emailSent = await sendEmail(
+      email,
+      "Verify your account",
+      `
+        <h2>Hello ${name}</h2>
+        <p>Click below to verify:</p>
+        <a href="${link}">Verify Account</a>
+      `
+    );
 
-if (!emailResult.success) {
-  return res.status(500).json({
-    success: false,
-    message: "Failed to send verification email",
-    error: emailResult.error,
-  });
-}
+    if (!emailSent) {
+      console.log("⚠️ Email failed but user created");
+    }
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -149,34 +148,34 @@ if (!emailResult.success) {
         return res.status(500).json({success:false,message:"Register Error"})
     }
 })
-app.get("/api/verify/:model/:id/:token", async (req, res) => {
+app.get("/api/verify/:id/:token", async (req, res) => {
   try {
-    const { model, id, token } = req.params;
+    const { id, token } = req.params;
 
-    const TargetModel = model === "Seller" ? Seller : Buyer;
-
-    const user = await TargetModel.findById(id);
+    const user = await Seller.findById(id);
 
     if (!user) {
-      return res.status(400).send("User not found");
+      return res.send("User not found");
     }
 
     if (user.verificationToken !== token) {
-      return res.status(400).send("Invalid or expired token");
+      return res.send("Invalid or expired token");
     }
 
     user.isVerified = true;
     user.verificationToken = undefined;
+
     await user.save();
 
     // redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
 
   } catch (error) {
-    console.error(error);
-    res.status(500).send("Server error");
+    console.log(error);
+    res.send("Server error");
   }
 });
+
 app.post("/api/login",async(req,res)=>{
     try {
         const{email,password}=req.body;

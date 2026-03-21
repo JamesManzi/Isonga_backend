@@ -1,36 +1,29 @@
 const nodemailer = require("nodemailer");
 
-const sendEmail = async (email, subject, htmlContent) => {
+const sendEmail = async (to, subject, html) => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.error("❌ Missing email environment variables");
-      return { success: false, error: "Missing credentials" };
-    }
-
     const transporter = nodemailer.createTransport({
-  service: "gmail", // Using 'service' shortcut handles host/port/secure automatically
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS.trim(),
-  },
-});
-
-    // Verify connection
-    await transporter.verify();
-
-    const info = await transporter.sendMail({
-      from: `"Isonga Market" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: subject,
-      html: htmlContent,
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
     });
 
-    console.log("✅ Email sent:", info.messageId);
+    // send email
+    const info = await transporter.sendMail({
+      from: `"Isonga Market" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html,
+    });
 
-    return { success: true };
+    console.log("✅ Email sent:", info.response);
+    return true;
+
   } catch (error) {
-    console.error("❌ EMAIL ERROR FULL:", error); // 🔥 FULL ERROR
-    return { success: false, error: error.message };
+    console.error("❌ Email error:", error);
+    return false;
   }
 };
 
