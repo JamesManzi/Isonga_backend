@@ -8,14 +8,12 @@ const sendEmail = async (email, subject, htmlContent) => {
     }
 
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS.trim(), // 🔥 IMPORTANT
-      },
-    });
+  service: "gmail", // Using 'service' shortcut handles host/port/secure automatically
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS.trim(),
+  },
+});
 
     // Verify connection
     await transporter.verify();
