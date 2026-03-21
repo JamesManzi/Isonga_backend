@@ -249,8 +249,9 @@ const emailResult = await sendEmail(
   "Verify your Isonga Buyer Account",
   `<h1>Welcome ${name}</h1>
    <p>Click the link below to verify your account:</p>
-   <a href="${verificationLink}">Verify Email</a>`
+   <a href="${link}">Verify Email</a>`
 );
+
 
 if (!emailResult.success) {
   return res.status(500).json({
