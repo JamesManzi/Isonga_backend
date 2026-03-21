@@ -123,7 +123,7 @@ const verificationToken = crypto.randomBytes(32).toString("hex");
           isVerified: false 
         });
 
-const link = `${process.env.BASE_URL}/api/verify/${newSeller._id}/${verificationToken}`;
+const link = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
 
     // 6. send email
     const emailSent = await sendEmail(
@@ -242,8 +242,7 @@ const newBuyer = await Buyer.create({
   isVerified: false,
 });
 
-// ✅ FIXED LINK (was wrong before)
-const verificationLink = `${process.env.BASE_URL}/api/verify/Buyer/${newBuyer._id}/${verificationToken}`;
+const link = `${process.env.BASE_URL}/api/verify/Buyer/${newBuyer._id}/${verificationToken}`;
 
 const emailResult = await sendEmail(
   email,
