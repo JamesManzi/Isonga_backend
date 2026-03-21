@@ -23,7 +23,7 @@ const sendEmail = require('./utils/sendEmail');
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin: ["https://isonga-frontend.vercel.app","https:/localhost:5000"],
+  origin: ["https://isonga-frontend.vercel.app","https://localhost:5000"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -109,27 +109,37 @@ if (!rule.test(password)) {
   return res.json({success:false,message:"Invalid Phone Number"});
 }
 const verificationToken = crypto.randomBytes(32).toString('hex');
-    const newSeller = await Seller.create({
-    name,
-    location,
-    phone,
-    email,
-    description,
-    password: hash,
-    files,
-    profile,
-    category,
-    sellerType,
-    verificationToken,
-    isVerified: false
-});
+   const newSeller = await Seller.create({ name,
+     location,
+      phone, 
+      email, 
+      description,
+       password: hash, 
+       files,
+        profile,
+        category,
+         sellerType, 
+         verificationToken,
+          isVerified: false 
+        });
+
 const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
 
-await sendEmail(
-    email, 
-    "Verify your Isonga Seller Account", 
-    `<h1>Welcome ${name}!</h1><p>Click <a href="${verificationLink}">here</a> to verify your account.</p>`
+const emailResult = await sendEmail(
+  email,
+  "Verify your Isonga Seller Account",
+  `<h1>Welcome ${name}</h1>
+   <p>Click the link below to verify your account:</p>
+   <a href="${verificationLink}">Verify Email</a>`
 );
+
+if (!emailResult.success) {
+  return res.status(500).json({
+    success: false,
+    message: "Failed to send verification email",
+    error: emailResult.error,
+  });
+}
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -139,34 +149,34 @@ await sendEmail(
         return res.status(500).json({success:false,message:"Register Error"})
     }
 })
-
 app.get("/api/verify/:model/:id/:token", async (req, res) => {
   try {
     const { model, id, token } = req.params;
-    
-    // Choose which model to look in
-    const TargetModel = model === "Seller" ? Seller : Buyer;
-    
-    const user = await TargetModel.findById(id);
-    if (!user) return res.status(400).send("User not found.");
 
-    if (user.verificationToken !== token) {
-      return res.status(400).send("Invalid or expired token.");
+    const TargetModel = model === "Seller" ? Seller : Buyer;
+
+    const user = await TargetModel.findById(id);
+
+    if (!user) {
+      return res.status(400).send("User not found");
     }
 
-    // Success! Update the user
+    if (user.verificationToken !== token) {
+      return res.status(400).send("Invalid or expired token");
+    }
+
     user.isVerified = true;
     user.verificationToken = undefined;
     await user.save();
 
-    // Redirect them back to your Vercel frontend
+    // redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
+
   } catch (error) {
     console.error(error);
-    res.status(500).send("Internal Server Error");
+    res.status(500).send("Server error");
   }
 });
-
 app.post("/api/login",async(req,res)=>{
     try {
         const{email,password}=req.body;
@@ -235,22 +245,35 @@ if (!rule.test(password)) {
     if(req.file){
         profile=req.file.path;
     }
-const verificationToken = crypto.randomBytes(32).toString('hex');
-    const newBuyer = await Buyer.create({
-    name,
-    email,
-    password: hash,
-    profile,
-    verificationToken,
-    isVerified: false
-});
-const verificationLink = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
+const verificationToken = crypto.randomBytes(32).toString("hex");
 
-await sendEmail(
-    email, 
-    "Verify your Isonga Seller Account", 
-    `<h1>Welcome ${name}!</h1><p>Click <a href="${verificationLink}">here</a> to verify your account.</p>`
+const newBuyer = await Buyer.create({
+  name,
+  email,
+  password: hash,
+  profile,
+  verificationToken,
+  isVerified: false,
+});
+
+// ✅ FIXED LINK (was wrong before)
+const verificationLink = `${process.env.BASE_URL}/api/verify/Buyer/${newBuyer._id}/${verificationToken}`;
+
+const emailResult = await sendEmail(
+  email,
+  "Verify your Isonga Buyer Account",
+  `<h1>Welcome ${name}</h1>
+   <p>Click the link below to verify your account:</p>
+   <a href="${verificationLink}">Verify Email</a>`
 );
+
+if (!emailResult.success) {
+  return res.status(500).json({
+    success: false,
+    message: "Failed to send verification email",
+    error: emailResult.error,
+  });
+}
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -281,11 +304,11 @@ app.post("/api/buyer_login",async(req,res)=>{
    })
 }
 
-if (!UserSeller.isVerified) {
-    return res.json({ 
-        success: false, 
-        message: "Your email is not verified. Please check your inbox." 
-    });
+if (!UserBuyer.isVerified) {
+  return res.json({
+    success: false,
+    message: "Please verify your email first",
+  });
 }
     req.session.buyerId=UserBuyer._id;
     const BuyerData={
