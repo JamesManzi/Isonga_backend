@@ -123,7 +123,7 @@ const verificationToken = crypto.randomBytes(32).toString("hex");
           isVerified: false 
         });
 
-const link = `${process.env.BASE_URL}/api/verify/${user._id}/${verificationToken}`;
+const link = `${process.env.BASE_URL}/api/verify/${newSeller._id}/${verificationToken}`;
 
     // 6. send email
     const emailSent = await sendEmail(
@@ -148,32 +148,19 @@ const link = `${process.env.BASE_URL}/api/verify/${user._id}/${verificationToken
         return res.status(500).json({success:false,message:"Register Error"})
     }
 })
-app.get("/api/verify/:id/:token", async (req, res) => {
-  try {
-    const { id, token } = req.params;
 
-    const user = await Seller.findById(id);
+// Seller verification
+app.get("/api/verify/Seller/:id/:token", async (req, res) => {
+  const { id, token } = req.params;
+  const seller = await Seller.findById(id);
+  if (!seller) return res.send("Seller not found");
+  if (seller.verificationToken !== token) return res.send("Invalid or expired token");
 
-    if (!user) {
-      return res.send("User not found");
-    }
+  seller.isVerified = true;
+  seller.verificationToken = undefined;
+  await seller.save();
 
-    if (user.verificationToken !== token) {
-      return res.send("Invalid or expired token");
-    }
-
-    user.isVerified = true;
-    user.verificationToken = undefined;
-
-    await user.save();
-
-    // redirect to frontend
-    res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
-
-  } catch (error) {
-    console.log(error);
-    res.send("Server error");
-  }
+  res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
 });
 
 app.post("/api/login",async(req,res)=>{
@@ -282,6 +269,21 @@ if (!emailResult.success) {
         return res.status(500).json({ success: false, debug: error.message });
     }
 })
+
+
+// Buyer verification
+app.get("/api/verify/Buyer/:id/:token", async (req, res) => {
+  const { id, token } = req.params;
+  const buyer = await Buyer.findById(id);
+  if (!buyer) return res.send("Buyer not found");
+  if (buyer.verificationToken !== token) return res.send("Invalid or expired token");
+
+  buyer.isVerified = true;
+  buyer.verificationToken = undefined;
+  await buyer.save();
+
+  res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
+});
 
 app.post("/api/buyer_login",async(req,res)=>{
     try {
