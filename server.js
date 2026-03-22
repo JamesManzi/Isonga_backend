@@ -106,7 +106,7 @@ if (!rule.test(password)) {
     if(!phoneRule.test(phone)){
   return res.json({success:false,message:"Invalid Phone Number"});
 }
-   const newSeller = await Seller.create({ 
+    await Seller.create({ 
      name,
      location,
       phone, 
@@ -191,7 +191,7 @@ if (!rule.test(password)) {
         profile=req.file.path;
     }
 
-    const buyer = await Buyer.create({
+     await Buyer.create({
       name,
       email,
       password: hashed,
