@@ -17,14 +17,7 @@ const buyerSchema=new mongoose.Schema({
     profile:{
         type:String,
         required:true
-    },
-    isVerified: { 
-        type: Boolean, 
-        default: false 
-    },
-    verificationToken: { 
-        type: String 
-    },
+    }
 })
 
 module.exports=mongoose.model("Buyer",buyerSchema);

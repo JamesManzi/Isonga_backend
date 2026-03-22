@@ -17,8 +17,6 @@ const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 const path = require("path");
 const Booking=require("./models/booking");
-const crypto = require('crypto');
-const sendEmail = require('./utils/sendEmail');
 // Creating App
 const app=express();
 //Cross Origin Configure
@@ -108,8 +106,8 @@ if (!rule.test(password)) {
     if(!phoneRule.test(phone)){
   return res.json({success:false,message:"Invalid Phone Number"});
 }
-const verificationToken = crypto.randomBytes(32).toString("hex");
-   const newSeller = await Seller.create({ name,
+   const newSeller = await Seller.create({ 
+     name,
      location,
       phone, 
       email, 
@@ -118,27 +116,9 @@ const verificationToken = crypto.randomBytes(32).toString("hex");
        files,
         profile,
         category,
-         sellerType, 
-         verificationToken,
-          isVerified: false 
+        sellerType 
         });
 
-const link = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verificationToken}`;
-
-    // 6. send email
-    const emailSent = await sendEmail(
-      email,
-      "Verify your account",
-      `
-        <h2>Hello ${name}</h2>
-        <p>Click below to verify:</p>
-        <a href="${link}">Verify Account</a>
-      `
-    );
-
-    if (!emailSent.success) {
-  console.log("❌ Email failed:", emailSent.error);
-}
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -148,20 +128,6 @@ const link = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verif
         return res.status(500).json({success:false,message:"Register Error"})
     }
 })
-
-// Seller verification
-app.get("/api/verify/Seller/:id/:token", async (req, res) => {
-  const { id, token } = req.params;
-  const seller = await Seller.findById(id);
-  if (!seller) return res.send("Seller not found");
-  if (seller.verificationToken !== token) return res.send("Invalid or expired token");
-
-  seller.isVerified = true;
-  seller.verificationToken = undefined;
-  await seller.save();
-
-  res.redirect(`${process.env.FRONTEND_URL}/login?verified=true`);
-});
 
 app.post("/api/login",async(req,res)=>{
     try {
@@ -181,13 +147,6 @@ app.post("/api/login",async(req,res)=>{
       success:false,
       message:"Email and Password required"
    })
-}
-   // ... inside /api/login after checking password compare
-if (!UserSeller.isVerified) {
-    return res.json({ 
-        success: false, 
-        message: "Your email is not verified. Please check your inbox." 
-    });
 }
     req.session.sellerId=UserSeller._id;
    const SellerData={
@@ -225,39 +184,21 @@ if (!rule.test(password)) {
     if(password!==repeat_pass){
         return res.json({success:false,message:"Password Must Much"});
     }
-    const hash=await bcrypt.hash(password,12);
+    const hashed=await bcrypt.hash(password,12);
 
     let profile="";
     if(req.file){
         profile=req.file.path;
     }
-const token = crypto.randomBytes(32).toString("hex");
 
     const buyer = await Buyer.create({
       name,
       email,
       password: hashed,
-      profile,
-      verificationToken: token,
-      isVerified: false,
+      profile
     });
 
-    // Create verification link
-    const link = `${process.env.BASE_URL}/api/buyer/verify/${buyer._id}/${token}`;
-    console.log("🔗 Verification link:", link);
-
-    // Send verification email
-    const emailResult = await sendEmail(
-      email,
-      "Verify your Isonga Market account",
-      `<h2>Hello ${name}</h2>
-       <p>Click to verify your email:</p>
-       <a href="${link}">Verify Account</a>`
-    );
-
-    if (!emailResult.success) {
-      console.log("⚠️ Email sending failed:", emailResult.error);
-    }
+    
     res.json({
         success:true,
         message:"User Registered Successfully"
@@ -267,25 +208,6 @@ const token = crypto.randomBytes(32).toString("hex");
         return res.status(500).json({ success: false, debug: error.message });
     }
 })
-
-app.get("/verify/:id/:token", async (req, res) => {
-  try {
-    const { id, token } = req.params;
-
-    const buyer = await Buyer.findById(id);
-    if (!buyer) return res.send("Buyer not found");
-
-    if (buyer.verificationToken !== token) return res.send("Invalid or expired token");
-
-    buyer.isVerified = true;
-    buyer.verificationToken = undefined;
-    await buyer.save();
-
-    res.send("✅ Email verified successfully!");
-  } catch (error) {
-    res.send("Verification failed");
-  }
-});
 
 app.post("/api/buyer_login",async(req,res)=>{
     try {
@@ -307,12 +229,6 @@ app.post("/api/buyer_login",async(req,res)=>{
    })
 }
 
-if (!UserBuyer.isVerified) {
-  return res.json({
-    success: false,
-    message: "Please verify your email first",
-  });
-}
     req.session.buyerId=UserBuyer._id;
     const BuyerData={
         id:UserBuyer._id,
