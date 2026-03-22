@@ -136,9 +136,9 @@ const link = `${process.env.BASE_URL}/api/verify/Seller/${newSeller._id}/${verif
       `
     );
 
-    if (!emailSent) {
-      console.log("⚠️ Email failed but user created");
-    }
+    if (!emailSent.success) {
+  console.log("❌ Email failed:", emailSent.error);
+}
     res.json({
         success:true,
         message:"User Registered Successfully"

@@ -2,12 +2,16 @@ const nodemailer = require("nodemailer");
 
 const sendEmail = async (to, subject, html) => {
   try {
+    console.log("📧 Attempting to send email...");
+    console.log("USER:", process.env.EMAIL_USER);
+
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
-        // IMPORTANT: Use a 16-character App Password, not your Gmail password
-        pass: process.env.EMAIL_PASS, 
+        pass: process.env.EMAIL_PASS,
       },
     });
 
@@ -19,10 +23,12 @@ const sendEmail = async (to, subject, html) => {
     });
 
     console.log("✅ Email sent:", info.response);
-    return { success: true }; // Corrected: returning an object
+
+    return { success: true };
+
   } catch (error) {
-    console.error("❌ Email error:", error);
-    return { success: false, error: error.message }; // Corrected: returning an object
+    console.error("❌ EMAIL ERROR FULL:", error); // VERY IMPORTANT
+    return { success: false, error: error.message };
   }
 };
 
