@@ -79,7 +79,7 @@ if (req.files && req.files.profile && req.files.profile.length > 0) {
 }
 
     let files=[];
-    if(req.files&&req.files.files&&req.files.files.length>2){
+    if(req.files&&req.files.files&&req.files.files.length>0){
          files = req.files.files.map(file => file.path);
     }
 
