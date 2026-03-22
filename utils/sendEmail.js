@@ -6,14 +6,12 @@ const sendEmail = async (to, subject, html) => {
     console.log("USER:", process.env.EMAIL_USER);
 
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+  service: "gmail", 
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS, // Ensure this is your 16-character App Password
+  },
+});
 
     const info = await transporter.sendMail({
       from: `"Isonga Market" <${process.env.EMAIL_USER}>`,
