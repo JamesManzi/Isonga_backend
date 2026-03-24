@@ -84,10 +84,6 @@ app.post("/api/register", upload.fields([
             sellerType
         } = req.body;
 
-        // Validate required fields
-        if (!name || !location || !phone || !email || !password || !repeat_pass || !description || !category || !sellerType) {
-            return res.json({ success: false, message: "All fields are required" });
-        }
 
         // Validate profile image
         if (!req.files || !req.files.profile || req.files.profile.length === 0) {
