@@ -68,132 +68,48 @@ app.post("/api/logout", (req, res) => {
 });
 // Seller Register
 app.post("/api/register", upload.fields([
-    { name: "profile", maxCount: 1 },
-    { name: "files", maxCount: 6 } // match frontend max 6
+    { name:"profile", maxCount:1 },
+    { name:"files", maxCount:5 }
 ]), async (req, res) => {
     try {
-        const {
-            name,
-            location,
-            phone,
-            email,
-            password,
-            repeat_pass,
-            description,
-            category,
-            sellerType
-        } = req.body;
+        console.log("Request body:", req.body);
+        console.log("Uploaded files:", req.files);
 
+        const { name, location, phone, email, password, repeat_pass, description, category, sellerType } = req.body;
 
-        // Validate profile image
+        // Check required files
         if (!req.files || !req.files.profile || req.files.profile.length === 0) {
-            return res.json({ success: false, message: "Profile photo is required" });
+            return res.status(400).json({ success: false, message: "Profile image required" });
         }
-
-        // Validate gallery images
         if (!req.files.files || req.files.files.length < 2) {
-            return res.json({ success: false, message: "Upload at least 2 store photos" });
+            return res.status(400).json({ success: false, message: "At least 2 store images required" });
         }
 
-        // Check existing seller
+        const profile = req.files.profile[0].path;
+        const files = req.files.files.map(f => f.path);
+
+        console.log("Profile path:", profile);
+        console.log("Files paths:", files);
+
         const existingSeller = await Seller.findOne({ email });
-        if (existingSeller) {
-            return res.json({ success: false, message: "User Already Exist" });
-        }
+        if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
 
-        // Password validation
-        const passwordRule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
-        if (!passwordRule.test(password)) {
-            return res.json({
-                success: false,
-                message: "Password must be at least 10 characters and include at least 3 of these: uppercase, lowercase, number, special character."
-            });
-        }
+        // Password validation here...
 
-        if (password !== repeat_pass) {
-            return res.json({ success: false, message: "Passwords must match" });
-        }
-
-        // Hash password
         const hash = await bcrypt.hash(password, 12);
 
-        // Phone validation
-        const phoneRule = /^07\d{8}$/;
-        if (!phoneRule.test(phone)) {
-            return res.json({ success: false, message: "Invalid Phone Number" });
-        }
-
-        // Upload images to Cloudinary
-        const cloudinary = require("../cloudinary"); // make sure path correct
-        // Upload profile
-        const profileFile = req.files.profile[0];
-        const profileResult = await cloudinary.uploader.upload(profileFile.path || profileFile.buffer, { folder: "sellers/profile" });
-
-        // Upload gallery
-        const galleryUrls = [];
-        for (const file of req.files.files) {
-            const result = await cloudinary.uploader.upload(file.path || file.buffer, { folder: "sellers/gallery" });
-            galleryUrls.push(result.secure_url);
-        }
-
-        // Create seller
-        await Seller.create({
-            name,
-            location,
-            phone,
-            email,
-            description,
-            password: hash,
-            profile: profileResult.secure_url,
-            files: galleryUrls,
-            category,
-            sellerType
+        const seller = await Seller.create({
+            name, profile, location, phone, email, files, password: hash, description, category, sellerType
         });
 
+        console.log("Seller created:", seller);
         res.json({ success: true, message: "User Registered Successfully" });
 
     } catch (error) {
-        console.error("Register Error:", error);
+        console.error("Register error:", error); // ← important
         return res.status(500).json({ success: false, message: "Register Error" });
     }
 });
-
-app.post("/api/login",async(req,res)=>{
-    try {
-        const{email,password}=req.body;
-    const UserSeller=await Seller.findOne({email});
-    if(!UserSeller){
-        return res.json({success:false,message:"Invalid Credentials"});
-    }
-
-    const compare=await bcrypt.compare(password,UserSeller.password);
-    if(!compare){
-        return res.json({success:false,message:"Invalid Credentials"});
-    }
-
-    if (!email || !password) {
-   return res.json({
-      success:false,
-      message:"Email and Password required"
-   })
-}
-    req.session.sellerId=UserSeller._id;
-   const SellerData={
-        id:UserSeller._id,
-        name:UserSeller.name,
-        email:UserSeller.email
-    }
-
-    res.json({
-        success:true,
-        message:"Login Successfully",
-        SellerData
-    })
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"Login Error"});
-    }
-})
 
 app.post("/api/buyer_register",upload.single("profile"),async(req,res)=>{
     try {
