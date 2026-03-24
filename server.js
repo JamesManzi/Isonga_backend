@@ -744,29 +744,19 @@ app.put(
     }
   }
 );
-app.delete("/api/delete_location_image/:filename", async (req, res) => {
+
+   app.delete("/api/delete_location_image/:filename", async (req, res) => {
   try {
-
-    const { filename } = req.params;
-
-    const seller = await Seller.findById(req.session.sellerId);
-
-    if (!seller) {
+    if (!req.session.sellerId) {
       return res.json({ success: false });
     }
 
-    // Remove from database
+    const { filename } = req.params;
+
     await Seller.findByIdAndUpdate(
       req.session.sellerId,
       { $pull: { files: filename } }
     );
-
-    // Remove from folder
-    const filePath = path.join(__dirname, "public/uploads", filename);
-
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
 
     res.json({ success: true });
 
@@ -775,8 +765,6 @@ app.delete("/api/delete_location_image/:filename", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
-
 
 app.get("/api/product_views", async (req, res) => {
   try {
