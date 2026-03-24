@@ -111,6 +111,43 @@ app.post("/api/register", upload.fields([
     }
 });
 
+app.post("/api/login",async(req,res)=>{
+  try {
+        const{email,password}=req.body;
+    const UserSeller=await Buyer.findOne({email});
+    if(!UserSeller){
+        return res.json({success:false,message:"Invalid Credentials"});
+    }
+
+    const compare=await bcrypt.compare(password,UserSeller.password);
+    if(!compare){
+        return res.json({success:false,message:"Invalid Credentials"});
+    }
+
+    if (!email || !password) {
+   return res.json({
+      success:false,
+      message:"Email and Password required"
+   })
+}
+
+    req.session.sellerId=UserSeller._id;
+    const SellerData={
+        id:UserSeller._id,
+        name:UserSeller.name,
+        email:UserSeller.email
+    };
+
+    res.json({
+        success:true,
+        message:"Login SuccessFully",
+        SellerData
+    })
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({success:false,message:"Login Error"});
+    }
+})
 app.post("/api/buyer_register",upload.single("profile"),async(req,res)=>{
     try {
         const{name,email,password,repeat_pass}=req.body;
