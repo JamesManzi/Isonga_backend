@@ -66,68 +66,101 @@ app.post("/api/logout", (req, res) => {
         res.json({ success: true });
     });
 });
-//  Seller Register
-app.post("/api/register",upload.fields([
-    {name:"profile",maxCount:1},
-    {name:"files",maxCount:5}
-]),async(req,res)=>{
+// Seller Register
+app.post("/api/register", upload.fields([
+    { name: "profile", maxCount: 1 },
+    { name: "files", maxCount: 6 } // match frontend max 6
+]), async (req, res) => {
     try {
-        const{name,location,phone,email,password,repeat_pass,description,category,sellerType}=req.body;
-   let profile = "";
-if (req.files && req.files.profile && req.files.profile.length > 0) {
-    profile = req.files.profile[0].path;
-}
+        const {
+            name,
+            location,
+            phone,
+            email,
+            password,
+            repeat_pass,
+            description,
+            category,
+            sellerType
+        } = req.body;
 
-    let files=[];
-    if(req.files&&req.files.files&&req.files.files.length>0){
-         files = req.files.files.map(file => file.path);
-    }
+        // Validate required fields
+        if (!name || !location || !phone || !email || !password || !repeat_pass || !description || !category || !sellerType) {
+            return res.json({ success: false, message: "All fields are required" });
+        }
 
-    const ExistingSeller=await Seller.findOne({email});
-    if(ExistingSeller){
-        return res.json({success:false,message:"User Already Exist"});
-    }
+        // Validate profile image
+        if (!req.files || !req.files.profile || req.files.profile.length === 0) {
+            return res.json({ success: false, message: "Profile photo is required" });
+        }
 
-    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+        // Validate gallery images
+        if (!req.files.files || req.files.files.length < 2) {
+            return res.json({ success: false, message: "Upload at least 2 store photos" });
+        }
 
-if (!rule.test(password)) {
-  return res.json({
-    success: false,
-    message: "Password must be at least 10 characters and include at least 3 of these: uppercase, lowercase, number, special character."
-  });
-}
+        // Check existing seller
+        const existingSeller = await Seller.findOne({ email });
+        if (existingSeller) {
+            return res.json({ success: false, message: "User Already Exist" });
+        }
 
-    if(password!==repeat_pass){
-        return res.json({success:false,message:"Password Must Match"});
-    }
-    const hash=await bcrypt.hash(password,12);
+        // Password validation
+        const passwordRule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+        if (!passwordRule.test(password)) {
+            return res.json({
+                success: false,
+                message: "Password must be at least 10 characters and include at least 3 of these: uppercase, lowercase, number, special character."
+            });
+        }
 
-    const phoneRule = /^07\d{8}$/;
-    if(!phoneRule.test(phone)){
-  return res.json({success:false,message:"Invalid Phone Number"});
-}
-    await Seller.create({ 
-     name,
-     location,
-      phone, 
-      email, 
-      description,
-       password: hash, 
-       files,
-        profile,
-        category,
-        sellerType 
+        if (password !== repeat_pass) {
+            return res.json({ success: false, message: "Passwords must match" });
+        }
+
+        // Hash password
+        const hash = await bcrypt.hash(password, 12);
+
+        // Phone validation
+        const phoneRule = /^07\d{8}$/;
+        if (!phoneRule.test(phone)) {
+            return res.json({ success: false, message: "Invalid Phone Number" });
+        }
+
+        // Upload images to Cloudinary
+        const cloudinary = require("../cloudinary"); // make sure path correct
+        // Upload profile
+        const profileFile = req.files.profile[0];
+        const profileResult = await cloudinary.uploader.upload(profileFile.path || profileFile.buffer, { folder: "sellers/profile" });
+
+        // Upload gallery
+        const galleryUrls = [];
+        for (const file of req.files.files) {
+            const result = await cloudinary.uploader.upload(file.path || file.buffer, { folder: "sellers/gallery" });
+            galleryUrls.push(result.secure_url);
+        }
+
+        // Create seller
+        await Seller.create({
+            name,
+            location,
+            phone,
+            email,
+            description,
+            password: hash,
+            profile: profileResult.secure_url,
+            files: galleryUrls,
+            category,
+            sellerType
         });
 
-    res.json({
-        success:true,
-        message:"User Registered Successfully"
-    })
+        res.json({ success: true, message: "User Registered Successfully" });
+
     } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"Register Error"})
+        console.error("Register Error:", error);
+        return res.status(500).json({ success: false, message: "Register Error" });
     }
-})
+});
 
 app.post("/api/login",async(req,res)=>{
     try {
