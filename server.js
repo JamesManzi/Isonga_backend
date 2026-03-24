@@ -114,7 +114,7 @@ app.post("/api/register", upload.fields([
 app.post("/api/login",async(req,res)=>{
   try {
         const{email,password}=req.body;
-    const UserSeller=await Buyer.findOne({email});
+    const UserSeller=await Seller.findOne({email});
     if(!UserSeller){
         return res.json({success:false,message:"Invalid Credentials"});
     }
