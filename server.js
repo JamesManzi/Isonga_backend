@@ -674,14 +674,16 @@ app.get("/api/buyer_profile/update",async(req,res)=>{
     }
 })
 const fs = require("fs");
-app.put("/api/seller_profile",
+
+app.put(
+  "/api/seller_profile",
   upload.fields([
     { name: "profileImage", maxCount: 1 },
     { name: "files", maxCount: 10 }
   ]),
   async (req, res) => {
     try {
-
+      // 🔐 CHECK LOGIN
       if (!req.session.sellerId) {
         return res.json({ success: false, message: "Not Logged In" });
       }
@@ -692,6 +694,7 @@ app.put("/api/seller_profile",
         return res.json({ success: false, message: "Seller Not Found" });
       }
 
+      // 📝 BASIC DATA
       let updatedData = {
         name: req.body.name,
         location: req.body.location,
@@ -700,44 +703,47 @@ app.put("/api/seller_profile",
       };
 
       // =============================
-      //  DELETE OLD PROFILE IMAGE
+      // ✅ UPDATE PROFILE IMAGE
       // =============================
-      if (req.files["profileImage"]) {
-
-        if (seller.profile) {
-          const oldPath = path.join(__dirname, "public/uploads", seller.profile);
-          if (fs.existsSync(oldPath)) {
-            fs.unlinkSync(oldPath);
-          }
-        }
-
-        updatedData.profile = req.files["profileImage"][0].filename;
+      if (req.files && req.files["profileImage"]) {
+        updatedData.profile = req.files["profileImage"][0].path; // ✅ FIXED
       }
 
       // =============================
-      // APPEND LOCATION IMAGES
+      // ✅ ADD LOCATION IMAGES
       // =============================
-      if (req.files["files"]) {
+      if (req.files && req.files["files"]) {
+        const newImages = req.files["files"].map(file => file.path); // ✅ FIXED
 
-        const newImages = req.files["files"].map(file => file.filename);
-
-        updatedData.files = [...seller.files, ...newImages];
+        updatedData.files = [
+          ...(seller.files || []),
+          ...newImages
+        ];
       }
 
+      // =============================
+      // 💾 SAVE UPDATE
+      // =============================
       const updatedSeller = await Seller.findByIdAndUpdate(
         req.session.sellerId,
         updatedData,
-        { returnDocument:"after"}
+        { new: true } // return updated document
       );
 
-      res.json({ success: true, updatedSeller });
+      res.json({
+        success: true,
+        updatedSeller
+      });
 
     } catch (error) {
-      console.log(error);
-      res.status(500).json({ success: false, message: "Update Error" });
+      console.log("UPDATE ERROR:", error);
+      res.status(500).json({
+        success: false,
+        message: "Update Error"
+      });
     }
-});
-
+  }
+);
 app.delete("/api/delete_location_image/:filename", async (req, res) => {
   try {
 
