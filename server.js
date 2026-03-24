@@ -636,7 +636,7 @@ app.put("/api/products/update/:id", upload.array("files", 10), async (req, res) 
 
     // Append new files instead of replacing
     if (req.files && req.files.length > 0) {
-      const newFiles = req.files.map(file => file.filename);
+      const newFiles = req.files.map(file => file.path);
       updatedData.files = updatedData.files.concat(newFiles);
     }
 
