@@ -21,9 +21,10 @@ const Booking=require("./models/booking");
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin:  "https://isonga-frontend.vercel.app",
+  origin: "https://isonga-frontend.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200 // Add this for legacy browser/incognito support
 }));
 // Define How Data Are Sent
 app.use(express.json());
@@ -33,23 +34,22 @@ const { upload } = require('./cloudinary');
 // Session Configure
 app.set("trust proxy", 1); // Help Https Work Well
 app.use(session({
-    name:"isonga.sid",
-    secret:process.env.SESSION_SECRET,
-    resave:false,
-    saveUninitialized:false,
-     proxy: true, 
+    name: "isonga.sid",
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false, // Keep this false to comply with privacy laws
+    proxy: true, 
     store: MongoStore.create({
-         mongoUrl: process.env.MONGO_URL,
+        mongoUrl: process.env.MONGO_URL,
         collectionName: "sessions"
     }),
-
-    cookie:{
-        httpOnly:true,
-        secure:true,
-        sameSite:"none",
-        maxAge:1000*60*30
+    cookie: {
+        httpOnly: true,
+        secure: true,      // Required for sameSite: "none"
+        sameSite: "none",  // Required for cross-domain (Vercel to Render)
+        maxAge: 1000 * 60 * 60 * 24, // Set to 24 hours (30 mins is very short)
     }
-}))
+}));
 // Database Connection
 mongoose.connect(process.env.MONGO_URL)
 .then(async () => {
