@@ -905,7 +905,7 @@ if(!req.files || req.files.length===0){
 return res.json({success:false,message:"No files uploaded"});
 }
 
-const fileUrls = req.files.map(file => "uploads/" + file.filename);
+const fileUrls = req.files.map(file => "uploads/" + file.path);
 
 res.json({
 success:true,
