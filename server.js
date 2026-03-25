@@ -395,7 +395,9 @@ app.get("/api/seller_profile", async (req, res) => {
 });
 app.get("/api/buyer_dashboard", async (req, res) => {
   try {
-   
+    if (!req.session.buyerId) {
+      return res.json({ success: false, message: "Buyer Not Logged In" });
+    }
 
     const buyer = await Buyer.findById(req.session.buyerId);
 
