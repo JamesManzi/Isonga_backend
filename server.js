@@ -22,12 +22,10 @@ const app=express();
 //Cross Origin Configure
 app.use(cors({
   origin: [
-    "https://isonga-frontend.vercel.app",
-    "http://localhost:3000"
+    "https://isonga-frontend.vercel.app"
   ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 // Define How Data Are Sent
 app.use(express.json());
@@ -41,6 +39,7 @@ app.use(session({
     secret:process.env.SESSION_SECRET,
     resave:false,
     saveUninitialized:false,
+     proxy: true, 
     store: MongoStore.create({
          mongoUrl: process.env.MONGO_URL,
         collectionName: "sessions"
@@ -49,7 +48,7 @@ app.use(session({
     cookie:{
         httpOnly:true,
         secure:true,
-        sameSite:"none",
+        sameSite:"lax",
         maxAge:1000*60*30
     }
 }))
