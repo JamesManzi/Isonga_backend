@@ -21,7 +21,7 @@ const Booking=require("./models/booking");
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin: ["https://isonga-frontend.vercel.app","https://localhost:5000"],
+  origin: ["https://isonga-frontend .vercel.app","https://localhost:5000"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -395,9 +395,7 @@ app.get("/api/seller_profile", async (req, res) => {
 });
 app.get("/api/buyer_dashboard", async (req, res) => {
   try {
-    if (!req.session.buyerId) {
-      return res.json({ success: false, message: "Buyer Not Logged In" });
-    }
+   
 
     const buyer = await Buyer.findById(req.session.buyerId);
 
