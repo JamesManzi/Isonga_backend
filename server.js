@@ -3,7 +3,6 @@ dns.setDefaultResultOrder('ipv4first');
 const express=require("express");
 const mongoose=require("mongoose");
 const bcrypt=require("bcryptjs");
-const session=require("express-session");
 const cors=require("cors");
 const multer=require("multer");
 require("dotenv").config();
@@ -12,11 +11,11 @@ const Buyer=require("./models/buyer");
 const Product=require("./models/product");
 const Rating=require("./models/Rating");
 const Message = require("./models/Message");
-const MongoStore = require("connect-mongo").default || require("connect-mongo");
 const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 const path = require("path");
 const Booking=require("./models/booking");
+const jwt = require("jsonwebtoken");
 // Creating App
 const app=express();
 //Cross Origin Configure
@@ -33,23 +32,25 @@ app.use(express.urlencoded({ extended: true }));
 const { upload } = require('./cloudinary');
 // Session Configure
 app.set("trust proxy", 1); // Help Https Work Well
-app.use(session({
-    name: "isonga.sid",
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false, // Keep this false to comply with privacy laws
-    proxy: true, 
-    store: MongoStore.create({
-        mongoUrl: process.env.MONGO_URL,
-        collectionName: "sessions"
-    }),
-    cookie: {
-        httpOnly: true,
-        secure: true,      // Required for sameSite: "none"
-        sameSite: "none",  // Required for cross-domain (Vercel to Render)
-        maxAge: 1000 * 60 * 60 * 24, // Set to 24 hours (30 mins is very short)
-    }
-}));
+const auth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, message: "No token provided" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Attach the user info to the request object
+    req.userId = decoded.id;
+    req.role = decoded.role;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: "Session expired or invalid token" });
+  }
+};
 // Database Connection
 mongoose.connect(process.env.MONGO_URL)
 .then(async () => {
@@ -58,14 +59,6 @@ mongoose.connect(process.env.MONGO_URL)
   console.log("Collections in DB:", collections.map(c => c.name));
 })
 .catch((error) => console.log(" DB connection error:", error));
-// Logout Roots
-app.post("/api/logout", (req, res) => {
-    req.session.destroy((err) => {
-        if (err) return res.status(500).json({ success: false,message:"Logout Error" });
-        res.clearCookie("isonga.sid"); // Use the name you gave your session
-        res.json({ success: true });
-    });
-});
 // Seller Register
 app.post("/api/register", upload.fields([
     { name:"profile", maxCount:1 },
@@ -111,43 +104,43 @@ app.post("/api/register", upload.fields([
     }
 });
 
-app.post("/api/login",async(req,res)=>{
+app.post("/api/login", async (req, res) => {
   try {
-        const{email,password}=req.body;
-    const UserSeller=await Seller.findOne({email});
-    if(!UserSeller){
-        return res.json({success:false,message:"Invalid Credentials"});
+    const { email, password } = req.body;
+
+    const user = await Seller.findOne({ email });
+    if (!user) {
+      return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    const compare=await bcrypt.compare(password,UserSeller.password);
-    if(!compare){
-        return res.json({success:false,message:"Invalid Credentials"});
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    if (!email || !password) {
-   return res.json({
-      success:false,
-      message:"Email and Password required"
-   })
-}
+    // 🔥 CREATE TOKEN
+    const token = jwt.sign(
+      { id: user._id, role: "seller" },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-    req.session.sellerId=UserSeller._id;
-    const SellerData={
-        id:UserSeller._id,
-        name:UserSeller.name,
-        email:UserSeller.email
-    };
 
-    res.json({
-        success:true,
-        message:"Login SuccessFully",
-        SellerData
-    })
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"Login Error"});
-    }
-})
+res.json({
+  success: true,
+  token,
+  seller: {
+    id: user._id,
+    name: user.name,
+    email: user.email
+  }
+});
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Login Error" });
+  }
+});
+
 app.post("/api/buyer_register",upload.single("profile"),async(req,res)=>{
     try {
         const{name,email,password,repeat_pass}=req.body;
@@ -191,50 +184,42 @@ if (!rule.test(password)) {
     }
 })
 
-app.post("/api/buyer_login",async(req,res)=>{
-    try {
-        const{email,password}=req.body;
-    const UserBuyer=await Buyer.findOne({email});
-    if(!UserBuyer){
-        return res.json({success:false,message:"Invalid Credentials"});
+app.post("/api/buyer_login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await Buyer.findOne({ email });
+    if (!user) {
+      return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    const compare=await bcrypt.compare(password,UserBuyer.password);
-    if(!compare){
-        return res.json({success:false,message:"Invalid Credentials"});
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    if (!email || !password) {
-   return res.json({
-      success:false,
-      message:"Email and Password required"
-   })
-}
-
-    req.session.buyerId=UserBuyer._id;
-    const BuyerData={
-        id:UserBuyer._id,
-        name:UserBuyer.name,
-        email:UserBuyer.email
-    };
-
+    const token = jwt.sign(
+      { id: user._id, role: "buyer" },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
     res.json({
-        success:true,
-        message:"Login SuccessFully",
-        BuyerData
-    })
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"Login Error"});
-    }
-})
+      success: true,
+      token,
+      buyer: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
+    });
 
-app.post("/api/add_product", upload.array("files",10), async (req,res)=>{
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
+});
+
+app.post("/api/add_product",auth, upload.array("files",10), async (req,res)=>{
 try{
-
-if(!req.session.sellerId){
-return res.json({success:false,message:"Seller Not Logged In"});
-}
 
 const {type,name,price,location,category,description,quantity}=req.body;
 
@@ -245,7 +230,7 @@ files=req.files.map(file=>file.path);
 }
 
 await Product.create({
-seller:req.session.sellerId,
+seller:req.userId,
 type,
 name,
 price,
@@ -270,9 +255,9 @@ message:"Add Item Error"
 }
 });
 
-app.get("/api/dashboard", async (req, res) => {
+app.get("/api/dashboard",auth, async (req, res) => {
   try {
-    const sellerId = req.session.sellerId;
+    const sellerId = req.userId;
     if (!sellerId) return res.json({ success: false, message: "Not Logged In" });
 
     const seller = await Seller.findById(sellerId);
@@ -335,14 +320,11 @@ const todayViews = todayEntry ? todayEntry.buyers.length : 0;
   }
 });
 
-app.get("/api/my_store",async(req,res)=>{
+app.get("/api/my_store",auth,async(req,res)=>{
  try {
-    if(!req.session.sellerId){
-        return res.json({success:false,message:"Seller Not Logged In"});
-    }
 
-    const products=await Product.find({seller:req.session.sellerId});
-    const seller=await Seller.findById(req.session.sellerId).select("name");
+    const products=await Product.find({seller:req.userId});
+    const seller=await Seller.findById(req.userId).select("name");
 
     res.json({
         success:true,
@@ -355,14 +337,11 @@ app.get("/api/my_store",async(req,res)=>{
  }
 })
 
-app.get("/api/seller_profile", async (req, res) => {
+app.get("/api/seller_profile",auth, async (req, res) => {
   try {
-    if (!req.session.sellerId) {
-      return res.json({ success: false, message: "Seller not logged in" });
-    }
 
     // Get seller
-    const seller = await Seller.findById(req.session.sellerId);
+    const seller = await Seller.findById(req.userId);
 
     if (!seller) {
       return res.json({ success: false, message: "Seller not found" });
@@ -393,13 +372,10 @@ app.get("/api/seller_profile", async (req, res) => {
     res.status(500).json({ success: false, message: "Seller_Profile Server error" });
   }
 });
-app.get("/api/buyer_dashboard", async (req, res) => {
+app.get("/api/buyer_dashboard",auth, async (req, res) => {
   try {
-    if (!req.session.buyerId) {
-      return res.json({ success: false, message: "Buyer Not Logged In" });
-    }
 
-    const buyer = await Buyer.findById(req.session.buyerId);
+    const buyer = await Buyer.findById(req.userId);
 
     // Fetch all sellers
     const sellers = await Seller.find().select(
@@ -434,11 +410,8 @@ app.get("/api/buyer_dashboard", async (req, res) => {
   }
 });
 
-app.get("/api/view_profile/:id", async (req, res) => {
+app.get("/api/view_profile/:id",auth, async (req, res) => {
   try {
-    if (!req.session.buyerId) {
-      return res.json({ success: false, message: "Buyer Not Logged In" });
-    }
 
     const sellerId = req.params.id;
 
@@ -473,11 +446,8 @@ app.get("/api/view_profile/:id", async (req, res) => {
   }
 });
 
-app.get("/api/view_products/:id",async(req,res)=>{
+app.get("/api/view_products/:id",auth,async(req,res)=>{
     try {
-        if(!req.session.buyerId){
-            return res.json({success:false,message:"Buyer Not Logged In"})
-        }
         const sellerId=req.params.id;
         const seller=await Seller.findById(sellerId);
         if (!seller) {
@@ -495,11 +465,8 @@ app.get("/api/view_products/:id",async(req,res)=>{
     }
 })
 
-app.get("/api/Service_Products/:id",async(req,res)=>{
+app.get("/api/Service_Products/:id",auth,async(req,res)=>{
   try {
-        if(!req.session.buyerId){
-            return res.json({success:false,message:"Buyer Not Logged In"})
-        }
         const sellerId=req.params.id;
         const seller=await Seller.findById(sellerId);
         if (!seller) {
@@ -517,11 +484,8 @@ app.get("/api/Service_Products/:id",async(req,res)=>{
     }
 })
 
-app.get("/api/Asset_Products/:id",async(req,res)=>{
+app.get("/api/Asset_Products/:id",auth,async(req,res)=>{
   try {
-        if(!req.session.buyerId){
-            return res.json({success:false,message:"Buyer Not Logged In"})
-        }
         const sellerId=req.params.id;
         const seller=await Seller.findById(sellerId);
         if (!seller) {
@@ -547,8 +511,8 @@ app.get("/api/sellers/:category", async (req, res) => {
 
     // Fetch buyer info if logged in
     let buyer = null;
-    if (req.session.buyerId) {
-      buyer = await Buyer.findById(req.session.buyerId).select("name profile");
+    if (req.userId) {
+      buyer = await Buyer.findById(req.userId).select("name profile");
     }
 
     // Attach ratings to each seller
@@ -579,11 +543,8 @@ app.get("/api/sellers/:category", async (req, res) => {
   }
 });
 
-app.delete("/api/products/delete/:productId", async (req, res) => {
+app.delete("/api/products/delete/:productId",auth, async (req, res) => {
   try {
-    if (!req.session.sellerId) {
-      return res.status(401).json({ success: false, message: "Seller Not Logged In" });
-    }
 
     const productId = req.params.productId;
     const product = await Product.findById(productId);
@@ -593,7 +554,7 @@ app.delete("/api/products/delete/:productId", async (req, res) => {
     }
 
     // Optional: check seller ownership
-    if (product.seller.toString() !== req.session.sellerId) {
+    if (product.seller.toString() !== req.userId) {
       return res.status(403).json({ success: false, message: "You can only delete your own products" });
     }
 
@@ -606,11 +567,8 @@ app.delete("/api/products/delete/:productId", async (req, res) => {
   }
 });
 
-app.put("/api/products/update/:id", upload.array("files", 10), async (req, res) => {
+app.put("/api/products/update/:id",auth, upload.array("files", 10), async (req, res) => {
   try {
-    if (!req.session.sellerId) {
-      return res.json({ success: false, message: "Seller Not Logged In" });
-    }
 
     const productId = req.params.id;
     const product = await Product.findById(productId);
@@ -618,7 +576,7 @@ app.put("/api/products/update/:id", upload.array("files", 10), async (req, res) 
       return res.json({ success: false, message: "Product Not Found" });
     }
 
-    if (product.seller.toString() !== req.session.sellerId) {
+    if (product.seller.toString() !== req.userId) {
       return res.json({ success: false, message: "UnAuthorised" });
     }
 
@@ -657,13 +615,10 @@ app.put("/api/products/update/:id", upload.array("files", 10), async (req, res) 
   }
 });
 
-app.get("/api/buyer_profile/update",async(req,res)=>{
+app.get("/api/buyer_profile/update",auth,async(req,res)=>{
     try {
-        if(!req.session.buyerId){
-            return res.json({success:false,message:"Buyer Not Logged In"});
-        }
 
-        const buyer=await Buyer.findById(req.session.buyerId);
+        const buyer=await Buyer.findById(req.userId);
         res.json({
             success:true,
             buyer
@@ -680,15 +635,10 @@ app.put(
   upload.fields([
     { name: "profileImage", maxCount: 1 },
     { name: "files", maxCount: 10 }
-  ]),
+  ]),auth,
   async (req, res) => {
     try {
-      // 🔐 CHECK LOGIN
-      if (!req.session.sellerId) {
-        return res.json({ success: false, message: "Not Logged In" });
-      }
-
-      const seller = await Seller.findById(req.session.sellerId);
+      const seller = await Seller.findById(req.userId);
 
       if (!seller) {
         return res.json({ success: false, message: "Seller Not Found" });
@@ -725,7 +675,7 @@ app.put(
       // 💾 SAVE UPDATE
       // =============================
       const updatedSeller = await Seller.findByIdAndUpdate(
-        req.session.sellerId,
+        req.userId,
         updatedData,
         { new: true } // return updated document
       );
@@ -745,16 +695,13 @@ app.put(
   }
 );
 
-   app.delete("/api/delete_location_image/:filename", async (req, res) => {
+   app.delete("/api/delete_location_image/:filename",auth, async (req, res) => {
   try {
-    if (!req.session.sellerId) {
-      return res.json({ success: false });
-    }
 
     const { filename } = req.params;
 
     await Seller.findByIdAndUpdate(
-      req.session.sellerId,
+      req.userId,
       { $pull: { files: filename } }
     );
 
@@ -766,11 +713,9 @@ app.put(
   }
 });
 
-app.get("/api/product_views", async (req, res) => {
+app.get("/api/product_views",auth, async (req, res) => {
   try {
-    if (!req.session.sellerId) return res.json({ success: false });
-
-    const products = await Product.find({ seller: req.session.sellerId });
+    const products = await Product.find({ seller: req.userId });
 
 const totalViews = products.reduce((sum, p) => sum + p.views, 0);
 
@@ -897,7 +842,7 @@ socket.on("sendMessage", async (data) => {
   }
 });
 
-app.post("/api/chat/upload", upload.array("files",10), (req,res)=>{
+app.post("/api/chat/upload",auth, upload.array("files",10), (req,res)=>{
 
 try{
 
@@ -969,9 +914,9 @@ app.get("/api/get_buyer/:id", async (req, res) => {
 });
 
 // GET all conversations for a seller
-app.get("/api/seller/conversations", async (req, res) => {
+app.get("/api/seller/conversations",auth, async (req, res) => {
   try {
-    const sellerId = req.session.sellerId;
+    const sellerId =req.userId;
     if (!sellerId) return res.status(401).json({ success: false });
 
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
@@ -1063,9 +1008,9 @@ app.get("/api/messages/:room", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-app.put("/api/messages/read/:room", async (req, res) => {
+app.put("/api/messages/read/:room",auth, async (req, res) => {
   try {
-    const userId = req.session.sellerId || req.session.buyerId;
+    const userId = req.userId;
     
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -1102,7 +1047,7 @@ app.get("/api/get_seller/:id", async (req, res) => {
 
 app.get("/api/buyer/conversations", async (req, res) => {
   try {
-    const buyerId = req.session.buyerId;
+    const buyerId = req.userId;
 
     if (!buyerId) {
       return res.status(401).json({ success: false, message: "Buyer not logged in" });
@@ -1196,16 +1141,14 @@ app.get("/api/buyer/conversations", async (req, res) => {
   }
 });
 
-app.post("/api/rate_seller/:sellerId", async (req, res) => {
+app.post("/api/rate_seller/:sellerId",auth, async (req, res) => {
   try {
-    if (!req.session.buyerId) return res.json({ success: false });
-
     const { rating, comment } = req.body;
     const sellerId = req.params.sellerId;
 
     let existing = await Rating.findOne({
       seller: sellerId,
-      buyer: req.session.buyerId
+      buyer: req.userId
     });
 
     if (existing) {
@@ -1215,7 +1158,7 @@ app.post("/api/rate_seller/:sellerId", async (req, res) => {
     } else {
       await Rating.create({
         seller: sellerId,
-        buyer: req.session.buyerId,
+        buyer: req.userId,
         rating,
         comment
       });
@@ -1333,10 +1276,10 @@ app.get("/api/sellers/search", async (req, res) => {
   }
 });
 
-app.post("/api/cart/add", async (req, res) => {
+app.post("/api/cart/add",auth, async (req, res) => {
     try {
         const { productId, quantity } = req.body;
-        const buyerId = req.session.buyerId;
+        const buyerId = req.userId;
 
         if (!buyerId) {
             return res.status(401).json({ success: false, message: "Please login to add items to cart" });
@@ -1378,12 +1321,10 @@ app.post("/api/cart/add", async (req, res) => {
     }
 });
 
-app.get("/api/cart", async (req, res) => {
+app.get("/api/cart",auth, async (req, res) => {
     try {
-        if (!req.session.buyerId) return res.status(401).json({ success: false });
-
-        const buyer=await Buyer.findById(req.session.buyerId).select("profile");
-        const cart = await Cart.findOne({ buyer: req.session.buyerId })
+        const buyer=await Buyer.findById(req.userId).select("profile");
+        const cart = await Cart.findOne({ buyer: req.userId })
             .populate("items.product", "name price files location");
 
         res.json({ success: true, cart,buyer });
@@ -1392,12 +1333,12 @@ app.get("/api/cart", async (req, res) => {
     }
 });
 
-app.put("/api/cart/update", async (req, res) => {
+app.put("/api/cart/update",auth, async (req, res) => {
   try {
 
     const { productId, quantity } = req.body;
 
-    const cart = await Cart.findOne({ buyer: req.session.buyerId });
+    const cart = await Cart.findOne({ buyer: req.userId });
 
     if (!cart) return res.json({ success:false });
 
@@ -1422,11 +1363,11 @@ app.put("/api/cart/update", async (req, res) => {
   }
 });
 
-app.get("/api/cart/count", async (req,res)=>{
+app.get("/api/cart/count",auth, async (req,res)=>{
  try{
 
    const cart = await Cart.findOne({
-     buyer:req.session.buyerId
+     buyer:req.userId
    });
 
    const count = cart ? cart.items.length : 0;
@@ -1445,11 +1386,9 @@ app.get("/api/cart/count", async (req,res)=>{
 // ==========================================
 
 // 1. PLACE ORDER (Buyer)
-app.post("/api/order", upload.single("paymentProof"), async (req, res) => {
+app.post("/api/order",auth, upload.single("paymentProof"), async (req, res) => {
   try {
-    const buyerId = req.session.buyerId;
-    if (!buyerId) return res.status(401).json({ success: false, message: "Please log in" });
-
+    const buyerId = req.userId;
     const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
 
     // Fetch the buyer's current cart
@@ -1507,10 +1446,9 @@ app.post("/api/order", upload.single("paymentProof"), async (req, res) => {
 });
 
 // 2. GET SELLER ORDERS
-app.get("/api/seller/orders", async (req, res) => {
+app.get("/api/seller/orders",auth, async (req, res) => {
   try {
-    const sellerId = req.session.sellerId;
-    if (!sellerId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    const sellerId = req.userId;
 
     // Find orders where at least one item belongs to this seller
     const orders = await Order.find({ "items.seller": sellerId })
@@ -1525,9 +1463,9 @@ app.get("/api/seller/orders", async (req, res) => {
 });
 
 
-app.put("/api/order/status/:id", async (req, res) => {
+app.put("/api/order/status/:id",auth, async (req, res) => {
   try {
-    const sellerId = req.session.sellerId;
+    const sellerId = req.userId;
     if (!sellerId) {
       return res.status(401).json({ success: false, message: "Not authorized" });
     }
@@ -1593,10 +1531,10 @@ app.put("/api/order/status/:id", async (req, res) => {
   }
 });
 
-app.post("/api/rate_seller", async (req, res) => {
+app.post("/api/rate_seller",auth, async (req, res) => {
   try {
     const { sellerId, rating, comment } = req.body;
-    const buyerId = req.session.buyerId;
+    const buyerId = req.userId;
 
     if (!buyerId) return res.json({ success: false, message: "Login required" });
 
@@ -1639,13 +1577,10 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-app.get("/api/buyer_profile", async (req, res) => {
+app.get("/api/buyer_profile",auth, async (req, res) => {
   try {
-    if (!req.session.buyerId) {
-      return res.status(401).json({ message: "Not logged in" });
-    }
 
-    const buyer = await Buyer.findById(req.session.buyerId);
+    const buyer = await Buyer.findById(req.userId);
 
     res.json({ success: true, buyer });
 
@@ -1665,12 +1600,8 @@ app.use((err, req, res, next) => {
 
 // POST: Create a new booking
 // Note: "paymentProof" here must match the key used in formData.append() on frontend
-app.post("/api/bookService", upload.single("paymentProof"), async (req, res) => {
+app.post("/api/bookService",auth, upload.single("paymentProof"), async (req, res) => {
   try {
-    // 1. Check Auth
-    if (!req.session.buyerId) {
-      return res.status(401).json({ success: false, message: "Please login to book" });
-    }
 
     const { productId, name, phone, date, time, message, paymentMethod } = req.body;
 
@@ -1682,7 +1613,7 @@ app.post("/api/bookService", upload.single("paymentProof"), async (req, res) => 
 
     // 3. Prepare the booking data
     const bookingData = {
-      buyer: req.session.buyerId,
+      buyer: req.userId,
       seller: productData.seller, // Automatically link the seller from the product
       product: productId,
       name,
@@ -1727,16 +1658,9 @@ res.json({
   }
 });
 
-// ... existing products/dashboard routes ...
-
-// ==========================================
-// 🚀 PASTE BOOKING ROUTES HERE
-// ==========================================
-
-// 1. GET all bookings for a specific seller
-app.get("/api/seller/bookings", async (req, res) => {
+app.get("/api/seller/bookings",auth, async (req, res) => {
   try {
-    const sellerId = req.session.sellerId;
+    const sellerId = req.userId;
     if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
 
     // We fetch everything so the frontend can decide what to show/hide
@@ -1752,11 +1676,11 @@ app.get("/api/seller/bookings", async (req, res) => {
 });
 
 // 2. UPDATE booking status
-app.put("/api/bookings/:id", async (req, res) => {
+app.put("/api/bookings/:id",auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const sellerId = req.session.sellerId;
+    const sellerId = req.userId;
 
     if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
 
@@ -1779,11 +1703,11 @@ app.put("/api/bookings/:id", async (req, res) => {
   }
 });
 
-app.put("/api/update_buyer_profile", upload.single("profile"), async (req,res)=>{
+app.put("/api/update_buyer_profile",auth, upload.single("profile"), async (req,res)=>{
 
 try{
 
-const buyerId = req.session.buyerId;
+const buyerId = req.userId;
 
 const buyer = await Buyer.findById(buyerId);
 
@@ -1811,12 +1735,9 @@ res.json({success:false});
 }
 
 });
-app.delete("/api/cart/remove/:id", async (req, res) => {
+app.delete("/api/cart/remove/:id",auth, async (req, res) => {
   try {
-    const buyerId = req.session.buyerId;
-    if (!buyerId) {
-      return res.status(401).json({ success: false, message: "Not logged in" });
-    }
+    const buyerId = req.userId;
 
     const identifier = req.params.id;
 
@@ -1854,9 +1775,9 @@ app.delete("/api/cart/remove/:id", async (req, res) => {
   }
 });
 
-app.post("/api/seller/mark-activity-read", async (req, res) => {
+app.post("/api/seller/mark-activity-read",auth, async (req, res) => {
   try {
-    const sellerId = req.session.sellerId;
+    const sellerId = req.userId;
 
     if (!sellerId) {
       return res.status(401).json({ success: false });
@@ -1890,10 +1811,10 @@ app.post("/api/seller/mark-activity-read", async (req, res) => {
   }
 });
 
-app.post("/api/seller/view/:id", async (req, res) => {
+app.post("/api/seller/view/:id",auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
-    const buyerId = req.session.buyerId;
+    const buyerId = req.userId;
 
     if (!buyerId) return res.json({ success: false, message: "Guest view" });
 
@@ -1943,6 +1864,7 @@ if (sellerSocket) {
     res.status(500).json({ success: false });
   }
 });
+
 // START SERVER
 // ==============================
 const PORT = process.env.PORT || 10000;
