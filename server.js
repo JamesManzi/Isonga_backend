@@ -21,8 +21,9 @@ const app=express();
 //Cross Origin Configure
 app.use(cors({
   origin: "https://isonga-frontend.vercel.app",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  optionsSuccessStatus: 200 // Add this for legacy browser/incognito support
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false
 }));
 // Define How Data Are Sent
 app.use(express.json());
