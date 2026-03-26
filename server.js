@@ -22,7 +22,6 @@ const app=express();
 app.use(cors({
   origin: "https://isonga-frontend.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
   optionsSuccessStatus: 200 // Add this for legacy browser/incognito support
 }));
 // Define How Data Are Sent
@@ -218,7 +217,7 @@ app.post("/api/buyer_login", async (req, res) => {
   }
 });
 
-app.post("/api/add_product",auth, upload.array("files",10), async (req,res)=>{
+app.post("/api/add_product",auth, upload.array("files",10),auth, async (req,res)=>{
 try{
 
 const {type,name,price,location,category,description,quantity}=req.body;
@@ -502,7 +501,7 @@ app.get("/api/Asset_Products/:id",auth,async(req,res)=>{
         return res.status(500).json({success:false,message:"View Products Error"});
     }
 })
-app.get("/api/sellers/:category", async (req, res) => {
+app.get("/api/sellers/:category",auth, async (req, res) => {
   try {
     // Find sellers by category
     const sellers = await Seller.find({
@@ -737,7 +736,6 @@ const io = new Server(httpServer, {
   cors: {
     origin: "https://isonga-frontend.vercel.app",
     methods: ["GET", "POST"],
-    credentials: true
   },
   transports: ['websocket', 'polling'] // Explicitly allow both
 });
@@ -903,7 +901,7 @@ socket.on("messagesRead", async ({ room }) => {
 
 });
 // Add this to your server.js
-app.get("/api/get_buyer/:id", async (req, res) => {
+app.get("/api/get_buyer/:id",auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.params.id).select("name profile");
     if (!buyer) return res.json({ success: false, message: "Buyer not found" });
@@ -1039,13 +1037,13 @@ app.put("/api/messages/read/:room",auth, async (req, res) => {
 });
 
 // In server.js
-app.get("/api/get_seller/:id", async (req, res) => {
+app.get("/api/get_seller/:id",auth, async (req, res) => {
   const seller = await Seller.findById(req.params.id).select("name profile");
   if (!seller) return res.json({ success: false });
   res.json({ success: true, seller });
 });
 
-app.get("/api/buyer/conversations", async (req, res) => {
+app.get("/api/buyer/conversations",auth, async (req, res) => {
   try {
     const buyerId = req.userId;
 
@@ -1865,6 +1863,12 @@ if (sellerSocket) {
   }
 });
 
+app.post("/api/logout", (req, res) => {
+  res.json({
+    success: true,
+    message: "Logged out successfully"
+  });
+});
 // START SERVER
 // ==============================
 const PORT = process.env.PORT || 10000;
