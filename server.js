@@ -190,12 +190,12 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-await transporter.sendMail({
+transporter.sendMail({
   from: process.env.EMAIL,
   to: email,
   subject: "Verify your account",
-  text: `Your verification code is: ${code}`
-});
+  text: `Your code is: ${code}`
+}).catch(err => console.log(err));
 
     
     res.json({
