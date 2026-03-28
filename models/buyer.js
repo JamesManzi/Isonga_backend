@@ -17,7 +17,10 @@ const buyerSchema=new mongoose.Schema({
     profile:{
         type:String,
         required:true
-    }
+    },
+    isVerified: { type: Boolean, default: false },
+verificationCode: String,
+verificationExpires: Date,
 })
 
 module.exports=mongoose.model("Buyer",buyerSchema);

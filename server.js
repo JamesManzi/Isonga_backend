@@ -166,23 +166,81 @@ if (!rule.test(password)) {
         profile=req.file.path;
     }
 
-     await Buyer.create({
-      name,
-      email,
-      password: hashed,
-      profile
-    });
+     const nodemailer = require("nodemailer");
+
+// generate OTP
+const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+await Buyer.create({
+  name,
+  email,
+  password: hashed,
+  profile,
+  isVerified: false,
+  verificationCode: code,
+  verificationExpires: Date.now() + 10 * 60 * 1000 // 10 minutes
+});
+
+// send email
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+await transporter.sendMail({
+  from: process.env.EMAIL,
+  to: email,
+  subject: "Verify your account",
+  text: `Your verification code is: ${code}`
+});
 
     
     res.json({
-        success:true,
-        message:"User Registered Successfully"
-    })
+  success: true,
+  message: "Verification code sent to email",
+  email
+});
     } catch (error) {
         console.log(error);
         return res.status(500).json({ success: false, debug: error.message });
     }
 })
+
+app.post("/api/verify-email", async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    const user = await Buyer.findOne({ email });
+
+    if (!user) {
+      return res.json({ success: false, message: "User not found" });
+    }
+
+    if (user.verificationCode !== code) {
+      return res.json({ success: false, message: "Invalid code" });
+    }
+
+    if (user.verificationExpires < Date.now()) {
+      return res.json({ success: false, message: "Code expired" });
+    }
+
+    user.isVerified = true;
+    user.verificationCode = null;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Email verified successfully"
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
+});
 
 app.post("/api/buyer_login", async (req, res) => {
   try {
@@ -192,6 +250,13 @@ app.post("/api/buyer_login", async (req, res) => {
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
+
+    if (!user.isVerified) {
+  return res.json({
+    success: false,
+    message: "Please verify your email first"
+  });
+}
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
