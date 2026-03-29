@@ -194,6 +194,40 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
         return res.status(500).json({ success: false, message: "Server Error" });
     }
 });
+
+app.post("/api/resend-verification", async (req, res) => {
+    try {
+        const { email } = req.body;
+        const buyer = await Buyer.findOne({ email });
+
+        if (!buyer) {
+            return res.json({ success: false, message: "User not found" });
+        }
+
+        // 1. Generate a NEW 6-digit code
+        const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // 2. Update the user in the Database with the new code and a fresh expiry
+        buyer.verificationCode = newCode;
+        buyer.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 more minutes
+        await buyer.save();
+
+        // 3. Send the new email via Resend API
+        await resend.emails.send({
+            from: 'Isonga Market <onboarding@resend.dev>',
+            to: email,
+            subject: 'New Verification Code - Isonga Market',
+            html: `<strong>Your new code is: ${newCode}</strong><p>This code replaces your previous one.</p>`
+        });
+
+        res.json({ success: true, message: "New code sent!" });
+
+    } catch (error) {
+        console.error("Resend Error:", error);
+        res.status(500).json({ success: false, message: "Failed to resend code" });
+    }
+});
+
 app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
