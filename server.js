@@ -1808,27 +1808,20 @@ app.get("/api/notifications", auth, async (req, res) => {
 
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    // 1. Ensure we have the ID from the middleware
-    const userId = req.userId; 
-
-    // 2. Perform the update
     const result = await Notification.updateMany(
       { 
-        recipient: userId, 
-        read: false 
-        // Optional: recipientModel: "Buyer" 
+        recipient: req.userId, 
+        read: false,
+        recipientModel: "Buyer" // <--- Crucial if you have both Sellers and Buyers
       },
       { $set: { read: true } }
     );
+    
+    // Check your terminal: if this says 0, your query criteria are wrong!
+    console.log("Documents updated:", result.modifiedCount); 
 
-    console.log(`Notifications updated for user ${userId}:`, result.modifiedCount);
-
-    res.json({ 
-      success: true, 
-      modifiedCount: result.modifiedCount 
-    });
+    res.json({ success: true });
   } catch (err) {
-    console.error("Error marking notifications as read:", err);
     res.status(500).json({ success: false });
   }
 });
