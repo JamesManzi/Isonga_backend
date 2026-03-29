@@ -1805,16 +1805,23 @@ app.get("/api/notifications", auth, async (req, res) => {
   }
 });
 
-// Mark all notifications as read for the logged-in buyer
+// --- ADD THIS ROUTE TO YOUR server.js ---
+
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
+    // req.userId comes from your 'auth' middleware
+    // This finds all unread notifications for the logged-in user and marks them read
     await Notification.updateMany(
       { recipient: req.userId, read: false },
       { $set: { read: true } }
     );
-    res.json({ success: true, message: "Notifications marked as read" });
-  } catch (err) {
-    console.error("Mark Read Error:", err);
+
+    res.json({ 
+      success: true, 
+      message: "Notifications marked as read" 
+    });
+  } catch (error) {
+    console.error("Mark Read Error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
