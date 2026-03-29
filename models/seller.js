@@ -9,6 +9,12 @@ const sellerSchema = new mongoose.Schema({
     files: [{ type: String, required: true }],
     password: { type: String, required: true },
     description: { type: String, required: true },
+     isVerified: {
+       type: Boolean,
+        default: false 
+      },
+verificationCode: String,
+verificationExpires: Date,
     category: { type: String, required: true },
       sellerType:{
        type: String,

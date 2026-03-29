@@ -61,48 +61,80 @@ mongoose.connect(process.env.MONGO_URL)
   console.log("Collections in DB:", collections.map(c => c.name));
 })
 .catch((error) => console.log(" DB connection error:", error));
-// Seller Register
+// Seller Register with Email Verification
 app.post("/api/register", upload.fields([
-    { name:"profile", maxCount:1 },
-    { name:"files", maxCount:5 }
+    { name: "profile", maxCount: 1 },
+    { name: "files", maxCount: 5 }
 ]), async (req, res) => {
     try {
-        console.log("Request body:", req.body);
-        console.log("Uploaded files:", req.files);
+        const { name, location, phone, email, password, description, category, sellerType } = req.body;
 
-        const { name, location, phone, email, password, repeat_pass, description, category, sellerType } = req.body;
-
-        // Check required files
-        if (!req.files || !req.files.profile || req.files.profile.length === 0) {
-            return res.status(400).json({ success: false, message: "Profile image required" });
-        }
-        if (!req.files.files || req.files.files.length < 2) {
-            return res.status(400).json({ success: false, message: "At least 2 store images required" });
-        }
-
-        const profile = req.files.profile[0].path;
-        const files = req.files.files.map(f => f.path);
-
-        console.log("Profile path:", profile);
-        console.log("Files paths:", files);
-
+        // 1. Basic Checks
         const existingSeller = await Seller.findOne({ email });
         if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
 
-        // Password validation here...
+        if (!req.files || !req.files.profile) {
+            return res.status(400).json({ success: false, message: "Profile image required" });
+        }
 
+        // 2. Prepare Data
         const hash = await bcrypt.hash(password, 12);
+        const profile = req.files.profile[0].path;
+        const files = req.files.files ? req.files.files.map(f => f.path) : [];
+        
+        // 3. Generate 6-Digit Code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-        const seller = await Seller.create({
-            name, profile, location, phone, email, files, password: hash, description, category, sellerType
+        console.log(`📧 Sending Seller Verification to: ${email}`);
+
+        // 4. Send Email via Resend
+        const { data, error } = await resend.emails.send({
+            from: 'Isonga Market <onboarding@resend.dev>',
+            to: email,
+            subject: 'Verify your Isonga Seller Account',
+            html: `
+                <div style="font-family: sans-serif; padding: 20px;">
+                    <h1 style="color: #2563eb;">Welcome to Isonga Market, ${name}!</h1>
+                    <p>To start selling, please verify your email using this code:</p>
+                    <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1e293b; padding: 10px; background: #f1f5f9; display: inline-block;">
+                        ${code}
+                    </div>
+                    <p>This code expires in 10 minutes.</p>
+                </div>
+            `
         });
 
-        console.log("Seller created:", seller);
-        res.json({ success: true, message: "User Registered Successfully" });
+        if (error) {
+            console.error("❌ Resend Error:", error);
+            return res.status(500).json({ success: false, message: "Email service failed" });
+        }
+
+        // 5. Create Seller (Unverified)
+        await Seller.create({
+            name,
+            profile,
+            location,
+            phone,
+            email,
+            files,
+            password: hash,
+            description,
+            category,
+            sellerType,
+            isVerified: false, // Must verify first
+            verificationCode: code,
+            verificationExpires: Date.now() + 10 * 60 * 1000 
+        });
+
+        res.json({ 
+            success: true, 
+            message: "Verification code sent to your email",
+            email 
+        });
 
     } catch (error) {
-        console.error("Register error:", error); // ← important
-        return res.status(500).json({ success: false, message: "Register Error" });
+        console.error("Seller Register error:", error);
+        return res.status(500).json({ success: false, message: "Server Error" });
     }
 });
 
@@ -114,7 +146,9 @@ app.post("/api/login", async (req, res) => {
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
-
+ if (!user.isVerified) {
+    return res.json({ success: false, message: "Please verify your email first" });
+}
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.json({ success: false, message: "Invalid Credentials" });
@@ -232,30 +266,18 @@ app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
 
-    const user = await Buyer.findOne({ email });
+    // Look in both collections
+    let user = await Buyer.findOne({ email }) || await Seller.findOne({ email });
 
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
-    }
-
-    if (user.verificationCode !== code) {
-      return res.json({ success: false, message: "Invalid code" });
-    }
-
-    if (user.verificationExpires < Date.now()) {
-      return res.json({ success: false, message: "Code expired" });
-    }
+    if (!user) return res.json({ success: false, message: "User not found" });
+    if (user.verificationCode !== code) return res.json({ success: false, message: "Invalid code" });
+    if (user.verificationExpires < Date.now()) return res.json({ success: false, message: "Code expired" });
 
     user.isVerified = true;
     user.verificationCode = null;
-
     await user.save();
 
-    res.json({
-      success: true,
-      message: "Email verified successfully"
-    });
-
+    res.json({ success: true, message: "Email verified successfully" });
   } catch (error) {
     res.status(500).json({ success: false });
   }
