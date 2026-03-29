@@ -1804,10 +1804,9 @@ app.get("/api/notifications", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-// 🔔 MARK ALL AS READ
+
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    // When the user opens the notification page, we flip 'read' to true
     await Notification.updateMany(
       { recipient: req.userId, read: false },
       { $set: { read: true } }
@@ -1817,6 +1816,7 @@ app.put("/api/notifications/mark-read", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
 app.post("/api/rate_seller",auth, async (req, res) => {
   try {
     const { sellerId, rating, comment } = req.body;
