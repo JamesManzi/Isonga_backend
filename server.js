@@ -266,20 +266,44 @@ app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
 
-    // Look in both collections
+    // 1. Force everything to String to avoid Type Mismatch
+    const inputCode = String(code).trim(); 
+
+    // 2. Look in both collections
     let user = await Buyer.findOne({ email }) || await Seller.findOne({ email });
 
-    if (!user) return res.json({ success: false, message: "User not found" });
-    if (user.verificationCode !== code) return res.json({ success: false, message: "Invalid code" });
-    if (user.verificationExpires < Date.now()) return res.json({ success: false, message: "Code expired" });
+    if (!user) {
+      return res.json({ success: false, message: "User not found" });
+    }
 
+    // --- DEBUGGING LOGS (Check these in your Render/Node terminal) ---
+    console.log(`--- Verification Check for ${email} ---`);
+    console.log(`Code from User: "${inputCode}" (Type: ${typeof inputCode})`);
+    console.log(`Code in DB: "${user.verificationCode}" (Type: ${typeof user.verificationCode})`);
+    // ----------------------------------------------------------------
+
+    // 3. Comparison (Forcing both to String again just to be 100% safe)
+    if (String(user.verificationCode) !== inputCode) {
+      return res.json({ success: false, message: "Invalid code" });
+    }
+
+    // 4. Expiry Check
+    if (user.verificationExpires < Date.now()) {
+      return res.json({ success: false, message: "Code expired" });
+    }
+
+    // 5. Success Logic
     user.isVerified = true;
-    user.verificationCode = null;
+    user.verificationCode = null; // Clear the code after use
+    user.verificationExpires = null; 
     await user.save();
 
+    console.log("✅ Verification Successful!");
     res.json({ success: true, message: "Email verified successfully" });
+
   } catch (error) {
-    res.status(500).json({ success: false });
+    console.error("🔥 Verify Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
