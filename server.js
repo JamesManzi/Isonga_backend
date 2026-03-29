@@ -1806,16 +1806,21 @@ app.get("/api/notifications", auth, async (req, res) => {
   }
 });
 
-// 2. Mark notifications as read
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    await Notification.updateMany(
-      { recipient: req.userId, read: false },
+    const userId = new mongoose.Types.ObjectId(req.userId);
+
+    const result = await Notification.updateMany(
+      { recipient: userId, read: false },
       { $set: { read: true } }
     );
+
+    console.log("UPDATED:", result.modifiedCount);
+
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Error marking read" });
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 });
 
