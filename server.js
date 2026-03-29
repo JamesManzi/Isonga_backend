@@ -420,6 +420,17 @@ app.post("/api/reset-password", async (req, res) => {
   }
 });
 
+app.post("/api/verify-reset-code", async (req, res) => {
+  const { email, code } = req.body;
+  const user = await Buyer.findOne({ email, verificationCode: code }) || 
+               await Seller.findOne({ email, verificationCode: code });
+
+  if (!user || user.verificationExpires < Date.now()) {
+    return res.json({ success: false, message: "Invalid code" });
+  }
+  res.json({ success: true }); // Move to step 3
+});
+
 app.post("/api/add_product",auth, upload.array("files",10),auth, async (req,res)=>{
 try{
 
