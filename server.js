@@ -1675,99 +1675,101 @@ app.get("/api/seller/orders",auth, async (req, res) => {
   }
 });
 
+// GET /api/orders/my-orders (For Buyers)
+app.get("/api/orders/my-orders", auth, async (req, res) => {
+  try {
+    if (req.role !== "buyer") {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    // Find orders belonging to this buyer, sorted by newest update
+    const orders = await Order.find({ buyer: req.userId })
+      .sort({ updatedAt: -1 })
+      .populate("items.product", "name");
+
+    res.json({
+      success: true,
+      orders
+    });
+  } catch (error) {
+    console.error("Fetch Buyer Orders Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
 app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
-    if (!sellerId) {
-      return res.status(401).json({ success: false, message: "Not authorized" });
+    const { status, type } = req.body;
+    const id = req.params.id;
+
+    const Model = type === "Service" ? Booking : Order;
+    
+    // Use .populate('buyer') if you want to send the buyer's name in the emit
+    const item = await Model.findById(id);
+
+    if (!item) return res.status(404).json({ success: false, message: "Record not found" });
+
+    // Improved Security Check
+    const isOwner = type === "Service" 
+      ? item.seller.toString() === sellerId
+      : (item.seller ? item.seller.toString() === sellerId : item.items.some(i => i.seller.toString() === sellerId));
+
+    if (!isOwner) return res.status(403).json({ success: false, message: "Not authorized" });
+
+    if (item.status !== "Pending") {
+      return res.json({ success: false, message: `Already ${item.status}` });
     }
 
-    const { status } = req.body;
-    const orderId = req.params.id;
+    item.status = status;
+    await item.save();
 
-    // 1. Find the order and populate basic info if needed
-    const order = await Order.findById(orderId);
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
-
-    // 2. Security Check: Does this seller own an item in this order?
-    const isSellerOwner = order.items.some(
-      item => item.seller.toString() === sellerId
-    );
-
-    if (!isSellerOwner) {
-      return res.status(403).json({ success: false, message: "Not your order" });
-    }
-
-    // 3. Logic Check: Prevent double-handling
-    if (order.status !== "Pending") {
-      return res.json({
-        success: false,
-        message: `Order already ${order.status}`
-      });
-    }
-
-    // 4. Validation: Only allow specific actions
-    const allowedStatuses = ["Accepted", "Cancelled"];
-    if (!allowedStatuses.includes(status)) {
-      return res.json({ success: false, message: "Invalid status" });
-    }
-
-    // --- UPDATE EXECUTION ---
-    order.status = status;
-    await order.save();
-
-    // 5. Create Persistent Notification (For the Database/Bell Icon)
-    const displayId = order._id.toString().slice(-6).toUpperCase();
+    // Notification Logic
+    const displayId = item._id.toString().slice(-6).toUpperCase();
+    const actionText = type === "Service" ? "booking" : "order";
     const notificationMessage = status === "Accepted" 
-      ? `✅ Great news! Your order #${displayId} has been accepted.` 
-      : `❌ Sorry, your order #${displayId} was cancelled by the seller.`;
+      ? `✅ Your ${actionText} #${displayId} has been accepted!` 
+      : `❌ Your ${actionText} #${displayId} was declined.`;
 
-    await Notification.create({
-      recipient: order.buyer, // Sending to the buyer
+    // 1. Create DB Notification
+    const newNotif = await Notification.create({
+      recipient: item.buyer,
       sender: sellerId,
       message: notificationMessage,
-      orderId: order._id,
-      read: false // Matches the logic we used in the Dashboard count
+      orderId: item._id,
+      read: false,
+      category: type // Added this for frontend filtering
     });
 
-    // 6. Calculate New Unread Count
+    // 2. Count unread
     const unreadCount = await Notification.countDocuments({ 
-      recipient: order.buyer, 
+      recipient: item.buyer, 
       read: false 
     });
 
-    // 7. REAL-TIME EMIT (The "Magic" Part)
-    // This sends the alert to the Buyer's Dashboard instantly
-    const buyerKey = `Buyer_${order.buyer}`;
-    
-    io.to(buyerKey).emit("new_notification", {
-      message: notificationMessage,
-      unreadCount: unreadCount,
-      orderId: order._id,
-      status: status // Passing status so frontend can color the alert (green/red)
-    });
-
-    // 8. Legacy Emit (Keep for your older components)
-    const buyerSocketId = onlineUsers.get(buyerKey);
-    if (buyerSocketId) {
-      io.to(buyerSocketId).emit("orderStatusUpdated", {
-        orderId: order._id,
-        status: status
+    // 3. Emit using req.io (Assuming middleware is set)
+    const buyerKey = `Buyer_${item.buyer}`;
+    if (req.io) {
+      req.io.to(buyerKey).emit("new_notification", {
+        _id: newNotif._id,
+        message: notificationMessage,
+        unreadCount: unreadCount,
+        orderId: item._id,
+        status: status,
+        type: type,
+        createdAt: newNotif.createdAt
       });
     }
 
     res.json({
       success: true,
-      message: `Order successfully ${status.toLowerCase()}`,
-      order
+      message: `${type} ${status.toLowerCase()} successfully`,
+      data: item
     });
 
   } catch (err) {
-    console.error("Order Update Error:", err);
-    res.status(500).json({ success: false, message: "Server error during update" });
+    console.error("Status Update Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
