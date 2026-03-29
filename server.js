@@ -170,15 +170,18 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
         // GENERATE CODE
         const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-        const transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: 465,
-            secure: true,
-            auth: {
-                user: process.env.EMAIL,
-                pass: process.env.EMAIL_PASS
-            }
-        });
+      const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // Must be false for 587
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false // Helps if there are certificate issues on the server
+  }
+});
 
         console.log("📧 Sending email to:", email);
 
