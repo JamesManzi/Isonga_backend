@@ -311,6 +311,7 @@ app.post("/api/verify-email", async (req, res) => {
   }
 });
 
+
 app.post("/api/buyer_login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -349,6 +350,73 @@ app.post("/api/buyer_login", async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ success: false });
+  }
+});
+
+app.post("/api/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // 1. Find user in either collection
+    let user = await Buyer.findOne({ email }) || await Seller.findOne({ email });
+
+    if (!user) {
+      return res.json({ success: false, message: "No account found with this email" });
+    }
+
+    // 2. Generate 6-digit reset code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // 3. Save to DB with short expiry (e.g., 5 minutes)
+    user.verificationCode = resetCode;
+    user.verificationExpires = Date.now() + 5 * 60 * 1000; 
+    await user.save();
+
+    // 4. Send Email
+    await resend.emails.send({
+      from: 'Isonga Market <onboarding@resend.dev>',
+      to: email,
+      subject: 'Reset your Isonga Market Password',
+      html: `<h3>Password Reset Request</h3>
+             <p>Use this code to reset your password: <b>${resetCode}</b></p>
+             <p>This code expires in 5 minutes.</p>`
+    });
+
+    res.json({ success: true, message: "Reset code sent to your email" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error sending email" });
+  }
+});
+
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    // 1. Find the user with that specific code
+    let user = await Buyer.findOne({ email, verificationCode: code }) || 
+               await Seller.findOne({ email, verificationCode: code });
+
+    if (!user) {
+      return res.json({ success: false, message: "Invalid or expired code" });
+    }
+
+    // 2. Check if code is expired
+    if (user.verificationExpires < Date.now()) {
+      return res.json({ success: false, message: "Code expired" });
+    }
+
+    // 3. Hash new password and save
+    const salt = await bcrypt.genSalt(12);
+    user.password = await bcrypt.hash(newPassword, salt);
+    
+    // 4. Clear reset fields so code can't be used again
+    user.verificationCode = null;
+    user.verificationExpires = null;
+    await user.save();
+
+    res.json({ success: true, message: "Password updated successfully!" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Reset failed" });
   }
 });
 
