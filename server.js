@@ -1685,13 +1685,14 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
     const { status } = req.body;
     const orderId = req.params.id;
 
+    // 1. Find the order and populate basic info if needed
     const order = await Order.findById(orderId);
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // ✅ YOUR ORIGINAL: Check if this seller owns at least one item
+    // 2. Security Check: Does this seller own an item in this order?
     const isSellerOwner = order.items.some(
       item => item.seller.toString() === sellerId
     );
@@ -1700,74 +1701,101 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
       return res.status(403).json({ success: false, message: "Not your order" });
     }
 
-    // ✅ YOUR ORIGINAL: Prevent re-updating
+    // 3. Logic Check: Prevent double-handling
     if (order.status !== "Pending") {
       return res.json({
         success: false,
-        message: "Order already handled"
+        message: `Order already ${order.status}`
       });
     }
 
-    // ✅ YOUR ORIGINAL: Allow only valid actions
+    // 4. Validation: Only allow specific actions
     const allowedStatuses = ["Accepted", "Cancelled"];
     if (!allowedStatuses.includes(status)) {
-      return res.json({
-        success: false,
-        message: "Invalid status"
-      });
+      return res.json({ success: false, message: "Invalid status" });
     }
 
-    // --- START OF UPDATED LOGIC (WITHOUT CHANGING ORIGINAL FLOW) ---
-
+    // --- UPDATE EXECUTION ---
     order.status = status;
     await order.save();
 
-    // 1. Create the database record for the notification bell
-    const message = status === "Accepted" 
-      ? `✅ Your order #...${order._id.slice(-6)} has been accepted!` 
-      : `❌ Your order #...${order._id.slice(-6)} was declined by the seller.`;
+    // 5. Create Persistent Notification (For the Database/Bell Icon)
+    const displayId = order._id.toString().slice(-6).toUpperCase();
+    const notificationMessage = status === "Accepted" 
+      ? `✅ Great news! Your order #${displayId} has been accepted.` 
+      : `❌ Sorry, your order #${displayId} was cancelled by the seller.`;
 
     await Notification.create({
-      recipient: order.buyer, // Matches your original "order.buyer" logic
-      message: message,
+      recipient: order.buyer, // Sending to the buyer
+      sender: sellerId,
+      message: notificationMessage,
       orderId: order._id,
-      status: "Unread"
+      read: false // Matches the logic we used in the Dashboard count
     });
 
-    // 2. Calculate the new unread count to update the Red Dot
+    // 6. Calculate New Unread Count
     const unreadCount = await Notification.countDocuments({ 
       recipient: order.buyer, 
-      status: "Unread" 
+      read: false 
     });
 
-    // 3. Emit the notification to the buyer's room
+    // 7. REAL-TIME EMIT (The "Magic" Part)
+    // This sends the alert to the Buyer's Dashboard instantly
     const buyerKey = `Buyer_${order.buyer}`;
     
-    // We use the same room logic you already have for messages
     io.to(buyerKey).emit("new_notification", {
-      message: message,
+      message: notificationMessage,
       unreadCount: unreadCount,
-      orderId: order._id
+      orderId: order._id,
+      status: status // Passing status so frontend can color the alert (green/red)
     });
 
-    // ✅ YOUR ORIGINAL: Keep the old socket event for compatibility
-    const buyerSocket = onlineUsers.get(buyerKey);
-    if (buyerSocket) {
-      io.to(buyerSocket).emit("orderStatusUpdated", {
+    // 8. Legacy Emit (Keep for your older components)
+    const buyerSocketId = onlineUsers.get(buyerKey);
+    if (buyerSocketId) {
+      io.to(buyerSocketId).emit("orderStatusUpdated", {
         orderId: order._id,
-        status: order.status
+        status: status
       });
     }
 
-    // --- END OF UPDATED LOGIC ---
-
     res.json({
       success: true,
-      message: `Order ${status}`
+      message: `Order successfully ${status.toLowerCase()}`,
+      order
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Order Update Error:", err);
+    res.status(500).json({ success: false, message: "Server error during update" });
+  }
+});
+
+// --- NEW NOTIFICATION ROUTES ---
+
+app.get("/api/notifications/unread-count", auth, async (req, res) => {
+  try {
+    // Count unread notifications for the logged-in user
+    const count = await Notification.countDocuments({ 
+      recipient: req.userId, 
+      read: false 
+    });
+    
+    res.json({ success: true, count });
+  } catch (error) {
+    console.error("Notification Count Error:", error);
+    res.status(500).json({ success: false });
+  }
+});
+
+// Route to get all notifications for the buyer
+app.get("/api/notifications", auth, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ recipient: req.userId })
+      .sort({ createdAt: -1 })
+      .limit(20);
+    res.json({ success: true, notifications });
+  } catch (error) {
     res.status(500).json({ success: false });
   }
 });
