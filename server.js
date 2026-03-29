@@ -141,7 +141,6 @@ res.json({
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
-
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     try {
         const { name, email, password, repeat_pass } = req.body;
@@ -170,33 +169,35 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
         // GENERATE CODE
         const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, 
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.EMAIL_PASS
-  },
-  // ADD THIS BLOCK TO FORCE IPV4
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
-  },
-  tls: {
-    rejectUnauthorized: false 
-  }
-});
-        console.log("📧 Sending email to:", email);
+        // FORCING GMAIL SERVICE & IPV4 FOR RENDER
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL,
+                pass: process.env.EMAIL_PASS
+            },
+            lookup: (hostname, options, callback) => {
+                dns.lookup(hostname, { family: 4 }, callback);
+            },
+            connectionTimeout: 15000, // 15 seconds
+            greetingTimeout: 15000,
+            socketTimeout: 15000,
+            debug: true, 
+            logger: true 
+        });
+
+        console.log("📧 Attempting to send email to:", email);
 
         // SEND EMAIL
         await transporter.sendMail({
-            from: process.env.EMAIL,
+            from: `"Isonga Market" <${process.env.EMAIL}>`,
             to: email,
-            subject: "Verify your account",
-            text: `Your verification code is: ${code}`
+            subject: "Verify your Isonga Market Account",
+            text: `Welcome ${name}! Your verification code is: ${code}. It expires in 10 minutes.`,
+            html: `<h3>Welcome to Isonga Market</h3><p>Your verification code is: <b>${code}</b></p>`
         });
 
-        console.log("✅ Email sent");
+        console.log("✅ Email sent successfully");
 
         // SAVE TO DATABASE
         await Buyer.create({
@@ -208,7 +209,6 @@ const transporter = nodemailer.createTransport({
             verificationExpires: Date.now() + 10 * 60 * 1000 // 10 mins
         });
 
-        // ONLY ONE RESPONSE HERE
         return res.json({
             success: true,
             message: "Verification code sent to email",
@@ -217,11 +217,10 @@ const transporter = nodemailer.createTransport({
 
     } catch (error) {
         console.error("🔥 REGISTER ERROR:", error);
-        // Ensure only one error response is sent
         if (!res.headersSent) {
             return res.status(500).json({ 
                 success: false, 
-                message: "Registration failed", 
+                message: "Registration failed due to email timeout", 
                 error: error.message 
             });
         }
