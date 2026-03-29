@@ -18,7 +18,7 @@ const Booking=require("./models/booking");
 const jwt = require("jsonwebtoken");
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
-const Notification = require("../models/Notification");
+const Notification = require("./models/Notification");
 // Creating App
 const app=express();
 //Cross Origin Configure
