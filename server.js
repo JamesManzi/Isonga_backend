@@ -952,7 +952,8 @@ const io = new Server(httpServer, {
     origin: "https://isonga-frontend.vercel.app",
     methods: ["GET", "POST"],
   },
-  transports: ['websocket', 'polling'] // Explicitly allow both
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000, // Increase timeout for slower connections
 });
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
@@ -1792,37 +1793,29 @@ app.get("/api/notifications/unread-count", auth, async (req, res) => {
   }
 });
 
-// GET ALL NOTIFICATIONS (For the notification page)
+// --- NOTIFICATION ROUTES ---
+
+// 1. Get all notifications for the logged-in user
 app.get("/api/notifications", auth, async (req, res) => {
   try {
     const notifications = await Notification.find({ recipient: req.userId })
-      .sort({ createdAt: -1 })
-      .limit(20);
-      
+      .sort({ createdAt: -1 });
     res.json({ success: true, notifications });
   } catch (err) {
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, message: "Error fetching notifications" });
   }
 });
 
-// --- ADD THIS ROUTE TO YOUR server.js ---
-
+// 2. Mark notifications as read
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    // req.userId comes from your 'auth' middleware
-    // This finds all unread notifications for the logged-in user and marks them read
     await Notification.updateMany(
       { recipient: req.userId, read: false },
       { $set: { read: true } }
     );
-
-    res.json({ 
-      success: true, 
-      message: "Notifications marked as read" 
-    });
-  } catch (error) {
-    console.error("Mark Read Error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Error marking read" });
   }
 });
 
