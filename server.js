@@ -1787,15 +1787,34 @@ app.get("/api/notifications/unread-count", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
-// Route to get all notifications for the buyer
+// 🔔 GET ALL NOTIFICATIONS
 app.get("/api/notifications", auth, async (req, res) => {
   try {
+    // We find notifications where the recipient is the logged-in user
+    // We sort by 'createdAt: -1' so the newest ones are at the top
     const notifications = await Notification.find({ recipient: req.userId })
-      .sort({ createdAt: -1 })
-      .limit(20);
-    res.json({ success: true, notifications });
-  } catch (error) {
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      notifications
+    });
+  } catch (err) {
+    console.error("Fetch Notif Error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+// 🔔 MARK ALL AS READ
+app.put("/api/notifications/mark-read", auth, async (req, res) => {
+  try {
+    // When the user opens the notification page, we flip 'read' to true
+    await Notification.updateMany(
+      { recipient: req.userId, read: false },
+      { $set: { read: true } }
+    );
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ success: false });
   }
 });
