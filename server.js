@@ -26,7 +26,7 @@ app.use(cors({
   origin: "https://isonga-frontend.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
+  credentials: false
 }));
 // Define How Data Are Sent
 app.use(express.json());
