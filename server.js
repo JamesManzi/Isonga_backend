@@ -1805,15 +1805,17 @@ app.get("/api/notifications", auth, async (req, res) => {
   }
 });
 
+// Mark all notifications as read for the logged-in buyer
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
     await Notification.updateMany(
       { recipient: req.userId, read: false },
       { $set: { read: true } }
     );
-    res.json({ success: true });
+    res.json({ success: true, message: "Notifications marked as read" });
   } catch (err) {
-    res.status(500).json({ success: false });
+    console.error("Mark Read Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
