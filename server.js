@@ -170,18 +170,23 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
         // GENERATE CODE
         const code = Math.floor(100000 + Math.random() * 900000).toString();
 
+      // Updated Transporter with IPv4 Force
       const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // Must be false for 587
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false // Helps if there are certificate issues on the server
-  }
-});
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false, 
+        auth: {
+          user: process.env.EMAIL,
+          pass: process.env.EMAIL_PASS
+        },
+        // THIS IS THE FIX: Force IPv4 for Render network compatibility
+        lookup: (hostname, options, callback) => {
+          dns.lookup(hostname, { family: 4 }, callback);
+        },
+        tls: {
+          rejectUnauthorized: false 
+        }
+      });
 
         console.log("📧 Sending email to:", email);
 
