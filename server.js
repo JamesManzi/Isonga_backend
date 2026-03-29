@@ -1808,24 +1808,27 @@ app.get("/api/notifications", auth, async (req, res) => {
 
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    const userId = new mongoose.Types.ObjectId(req.userId);
-    const userRole = req.role; // 'buyer' or 'seller' from your JWT
+    // 1. Ensure we have the ID from the middleware
+    const userId = req.userId; 
 
+    // 2. Perform the update
     const result = await Notification.updateMany(
       { 
         recipient: userId, 
-        // Ensure the role matches how you saved it (e.g., 'Buyer' vs 'buyer')
-        recipientModel: { $regex: new RegExp(`^${userRole}$`, "i") }, 
         read: false 
+        // Optional: recipientModel: "Buyer" 
       },
       { $set: { read: true } }
     );
 
-    console.log(`✅ Marked ${result.modifiedCount} notifications as read for ${userRole}: ${userId}`);
+    console.log(`Notifications updated for user ${userId}:`, result.modifiedCount);
 
-    res.json({ success: true, modifiedCount: result.modifiedCount });
+    res.json({ 
+      success: true, 
+      modifiedCount: result.modifiedCount 
+    });
   } catch (err) {
-    console.error("❌ Mark Read Error:", err);
+    console.error("Error marking notifications as read:", err);
     res.status(500).json({ success: false });
   }
 });
