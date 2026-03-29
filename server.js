@@ -165,10 +165,8 @@ if (!rule.test(password)) {
     if(req.file){
         profile=req.file.path;
     }
+    const nodemailer = require("nodemailer");
 
-     const nodemailer = require("nodemailer");
-
-// generate OTP
 const code = Math.floor(100000 + Math.random() * 900000).toString();
 
 await Buyer.create({
@@ -178,10 +176,9 @@ await Buyer.create({
   profile,
   isVerified: false,
   verificationCode: code,
-  verificationExpires: Date.now() + 10 * 60 * 1000 // 10 minutes
+  verificationExpires: Date.now() + 10 * 60 * 1000
 });
 
-// send email
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -190,14 +187,26 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-transporter.sendMail({
-  from: process.env.EMAIL,
-  to: email,
-  subject: "Verify your account",
-  text: `Your code is: ${code}`
-}).catch(err => console.log(err));
+try {
+  console.log("Sending email...");
 
-    
+  await transporter.sendMail({
+    from: process.env.EMAIL,
+    to: email,
+    subject: "Verify your account",
+    text: `Your verification code is: ${code}`
+  });
+
+  console.log("Email sent successfully");
+
+} catch (err) {
+  console.log("EMAIL ERROR:", err);
+
+  return res.status(500).json({
+    success: false,
+    message: "Email sending failed"
+  });
+}
     res.json({
   success: true,
   message: "Verification code sent to email",
