@@ -141,10 +141,6 @@ res.json({
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
-// 1. Move this to the TOP of your server.js with other requires
-const nodemailer = require("nodemailer");
-
-// ... (other code)
 
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     try {
