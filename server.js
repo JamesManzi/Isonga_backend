@@ -265,45 +265,49 @@ app.post("/api/resend-verification", async (req, res) => {
 app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
+    const inputCode = String(code).trim();
 
-    // 1. Force everything to String to avoid Type Mismatch
-    const inputCode = String(code).trim(); 
-
-    // 2. Look in both collections
-    let user = await Buyer.findOne({ email }) || await Seller.findOne({ email });
+    // 1. Look for the user in both collections specifically for the code
+    // This solves the issue if an email exists in both Buyer and Seller collections
+    let user = await Buyer.findOne({ email, verificationCode: inputCode });
+    let modelType = "Buyer";
 
     if (!user) {
-      return res.json({ success: false, message: "User not found" });
+      user = await Seller.findOne({ email, verificationCode: inputCode });
+      modelType = "Seller";
     }
 
-    // --- DEBUGGING LOGS (Check these in your Render/Node terminal) ---
-    console.log(`--- Verification Check for ${email} ---`);
-    console.log(`Code from User: "${inputCode}" (Type: ${typeof inputCode})`);
-    console.log(`Code in DB: "${user.verificationCode}" (Type: ${typeof user.verificationCode})`);
-    // ----------------------------------------------------------------
-
-    // 3. Comparison (Forcing both to String again just to be 100% safe)
-    if (String(user.verificationCode) !== inputCode) {
+    // 2. If NO user in either collection has that code
+    if (!user) {
+      // DEBUG: Let's see what's actually in the DB for this email
+      const bTest = await Buyer.findOne({ email });
+      const sTest = await Seller.findOne({ email });
+      
+      console.log(`--- Verification Failed for ${email} ---`);
+      console.log(`Input Code: ${inputCode}`);
+      console.log(`Buyer Code in DB: ${bTest?.verificationCode || "None"}`);
+      console.log(`Seller Code in DB: ${sTest?.verificationCode || "None"}`);
+      
       return res.json({ success: false, message: "Invalid code" });
     }
 
-    // 4. Expiry Check
+    // 3. Check Expiry
     if (user.verificationExpires < Date.now()) {
       return res.json({ success: false, message: "Code expired" });
     }
 
-    // 5. Success Logic
+    // 4. Success Logic - Update the specific document found
     user.isVerified = true;
-    user.verificationCode = null; // Clear the code after use
-    user.verificationExpires = null; 
+    user.verificationCode = null;
+    user.verificationExpires = null;
     await user.save();
 
-    console.log("✅ Verification Successful!");
-    res.json({ success: true, message: "Email verified successfully" });
+    console.log(`✅ ${modelType} verified successfully: ${email}`);
+    res.json({ success: true, message: `${modelType} verified successfully` });
 
   } catch (error) {
     console.error("🔥 Verify Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
