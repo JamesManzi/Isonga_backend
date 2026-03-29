@@ -16,6 +16,7 @@ const Order = require("./models/Order");
 const path = require("path");
 const Booking=require("./models/booking");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 // Creating App
 const app=express();
 //Cross Origin Configure
@@ -140,93 +141,90 @@ res.json({
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
+// 1. Move this to the TOP of your server.js with other requires
+const nodemailer = require("nodemailer");
 
-app.post("/api/buyer_register",upload.single("profile"),async(req,res)=>{
+// ... (other code)
+
+app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     try {
-        const{name,email,password,repeat_pass}=req.body;
-    const ExistingBuyer=await Buyer.findOne({email});
-    if(ExistingBuyer){
-        return res.json({success:false,message:"User Already Exist"});
-    }
-const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+        const { name, email, password, repeat_pass } = req.body;
+        
+        const ExistingBuyer = await Buyer.findOne({ email });
+        if (ExistingBuyer) {
+            return res.json({ success: false, message: "User Already Exist" });
+        }
 
-if (!rule.test(password)) {
-  return res.json({
-    success: false,
-    message: "Password must be at least 10 characters and include at least 3 of these: uppercase, lowercase, number, special character."
-  });
-}
-    if(password!==repeat_pass){
-        return res.json({success:false,message:"Password Must Much"});
-    }
-    const hashed=await bcrypt.hash(password,12);
+        const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
 
-    let profile="";
-    if(req.file){
-        profile=req.file.path;
-    }
-  const nodemailer = require("nodemailer");
+        if (!rule.test(password)) {
+            return res.json({
+                success: false,
+                message: "Password must be at least 10 characters and include uppercase, lowercase, and a number/special char."
+            });
+        }
 
-// ✅ GENERATE CODE
-const code = Math.floor(100000 + Math.random() * 900000).toString();
+        if (password !== repeat_pass) {
+            return res.json({ success: false, message: "Passwords do not match" });
+        }
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.EMAIL_PASS
-  }
-});
+        const hashed = await bcrypt.hash(password, 12);
+        let profile = req.file ? req.file.path : "";
 
-try {
-  console.log("📧 Sending email to:", email);
+        // GENERATE CODE
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-  await transporter.sendMail({
-    from: process.env.EMAIL,
-    to: email,
-    subject: "Verify your account",
-    text: `Your verification code is: ${code}`
-  });
+        const transporter = nodemailer.createTransport({
+            host: "smtp.gmail.com",
+            port: 465,
+            secure: true,
+            auth: {
+                user: process.env.EMAIL,
+                pass: process.env.EMAIL_PASS
+            }
+        });
 
-  console.log("✅ Email sent");
+        console.log("📧 Sending email to:", email);
 
-  // ✅ SAVE CODE TO DATABASE
-  const newBuyer = await Buyer.create({
-    name,
-    email,
-    password: hashed,
-    profile,
-    verificationCode: code,
-    verificationExpires: Date.now() + 10 * 60 * 1000 // 10 mins
-  });
+        // SEND EMAIL
+        await transporter.sendMail({
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Verify your account",
+            text: `Your verification code is: ${code}`
+        });
 
-  res.json({
-    success: true,
-    message: "Verification code sent to email",
-    email
-  });
+        console.log("✅ Email sent");
 
-} catch (err) {
-  console.log("🔥 FULL EMAIL ERROR:", err);
+        // SAVE TO DATABASE
+        await Buyer.create({
+            name,
+            email,
+            password: hashed,
+            profile,
+            verificationCode: code,
+            verificationExpires: Date.now() + 10 * 60 * 1000 // 10 mins
+        });
 
-  return res.status(500).json({
-    success: false,
-    message: "Email sending failed",
-    error: err.message
-  });
-}
-    res.json({
-  success: true,
-  message: "Verification code sent to email",
-  email
-});
+        // ONLY ONE RESPONSE HERE
+        return res.json({
+            success: true,
+            message: "Verification code sent to email",
+            email
+        });
+
     } catch (error) {
-        console.log(error);
-        return res.status(500).json({ success: false, debug: error.message });
+        console.error("🔥 REGISTER ERROR:", error);
+        // Ensure only one error response is sent
+        if (!res.headersSent) {
+            return res.status(500).json({ 
+                success: false, 
+                message: "Registration failed", 
+                error: error.message 
+            });
+        }
     }
-})
+});
 
 app.post("/api/verify-email", async (req, res) => {
   try {
