@@ -18,6 +18,7 @@ const Booking=require("./models/booking");
 const jwt = require("jsonwebtoken");
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
+const Notification = require("../models/Notification");
 // Creating App
 const app=express();
 //Cross Origin Configure
@@ -1674,8 +1675,7 @@ app.get("/api/seller/orders",auth, async (req, res) => {
   }
 });
 
-
-app.put("/api/order/status/:id",auth, async (req, res) => {
+app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
     if (!sellerId) {
@@ -1691,7 +1691,7 @@ app.put("/api/order/status/:id",auth, async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // ✅ Check if this seller owns at least one item in the order
+    // ✅ YOUR ORIGINAL: Check if this seller owns at least one item
     const isSellerOwner = order.items.some(
       item => item.seller.toString() === sellerId
     );
@@ -1700,7 +1700,7 @@ app.put("/api/order/status/:id",auth, async (req, res) => {
       return res.status(403).json({ success: false, message: "Not your order" });
     }
 
-    // ✅ Prevent re-updating
+    // ✅ YOUR ORIGINAL: Prevent re-updating
     if (order.status !== "Pending") {
       return res.json({
         success: false,
@@ -1708,9 +1708,8 @@ app.put("/api/order/status/:id",auth, async (req, res) => {
       });
     }
 
-    // ✅ Allow only valid actions
+    // ✅ YOUR ORIGINAL: Allow only valid actions
     const allowedStatuses = ["Accepted", "Cancelled"];
-
     if (!allowedStatuses.includes(status)) {
       return res.json({
         success: false,
@@ -1718,19 +1717,49 @@ app.put("/api/order/status/:id",auth, async (req, res) => {
       });
     }
 
+    // --- START OF UPDATED LOGIC (WITHOUT CHANGING ORIGINAL FLOW) ---
+
     order.status = status;
     await order.save();
 
-    // 🔥 REAL-TIME UPDATE TO BUYER
-    const buyerKey = `Buyer_${order.buyer}`;
-    const buyerSocket = onlineUsers.get(buyerKey);
+    // 1. Create the database record for the notification bell
+    const message = status === "Accepted" 
+      ? `✅ Your order #...${order._id.slice(-6)} has been accepted!` 
+      : `❌ Your order #...${order._id.slice(-6)} was declined by the seller.`;
 
+    await Notification.create({
+      recipient: order.buyer, // Matches your original "order.buyer" logic
+      message: message,
+      orderId: order._id,
+      status: "Unread"
+    });
+
+    // 2. Calculate the new unread count to update the Red Dot
+    const unreadCount = await Notification.countDocuments({ 
+      recipient: order.buyer, 
+      status: "Unread" 
+    });
+
+    // 3. Emit the notification to the buyer's room
+    const buyerKey = `Buyer_${order.buyer}`;
+    
+    // We use the same room logic you already have for messages
+    io.to(buyerKey).emit("new_notification", {
+      message: message,
+      unreadCount: unreadCount,
+      orderId: order._id
+    });
+
+    // ✅ YOUR ORIGINAL: Keep the old socket event for compatibility
+    const buyerSocket = onlineUsers.get(buyerKey);
     if (buyerSocket) {
       io.to(buyerSocket).emit("orderStatusUpdated", {
         orderId: order._id,
         status: order.status
       });
     }
+
+    // --- END OF UPDATED LOGIC ---
 
     res.json({
       success: true,
@@ -1742,7 +1771,6 @@ app.put("/api/order/status/:id",auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
 app.post("/api/rate_seller",auth, async (req, res) => {
   try {
     const { sellerId, rating, comment } = req.body;
