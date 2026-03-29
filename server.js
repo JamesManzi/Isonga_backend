@@ -1771,40 +1771,37 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
   }
 });
 
-// --- NEW NOTIFICATION ROUTES ---
-
+// GET UNREAD NOTIFICATION COUNT
 app.get("/api/notifications/unread-count", auth, async (req, res) => {
   try {
-    // Count unread notifications for the logged-in user
+    // This counts unread notifications for the logged-in user
     const count = await Notification.countDocuments({ 
       recipient: req.userId, 
       read: false 
     });
     
-    res.json({ success: true, count });
-  } catch (error) {
-    console.error("Notification Count Error:", error);
-    res.status(500).json({ success: false });
-  }
-});
-// 🔔 GET ALL NOTIFICATIONS
-app.get("/api/notifications", auth, async (req, res) => {
-  try {
-    // We find notifications where the recipient is the logged-in user
-    // We sort by 'createdAt: -1' so the newest ones are at the top
-    const notifications = await Notification.find({ recipient: req.userId })
-      .sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      notifications
+    res.json({ 
+      success: true, 
+      count 
     });
   } catch (err) {
-    console.error("Fetch Notif Error:", err);
+    console.error("Notification Count Error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
+// GET ALL NOTIFICATIONS (For the notification page)
+app.get("/api/notifications", auth, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ recipient: req.userId })
+      .sort({ createdAt: -1 })
+      .limit(20);
+      
+    res.json({ success: true, notifications });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+});
 // 🔔 MARK ALL AS READ
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
