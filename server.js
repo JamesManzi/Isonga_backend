@@ -165,7 +165,10 @@ if (!rule.test(password)) {
     if(req.file){
         profile=req.file.path;
     }
-   const nodemailer = require("nodemailer");
+  const nodemailer = require("nodemailer");
+
+// ✅ GENERATE CODE
+const code = Math.floor(100000 + Math.random() * 900000).toString();
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -179,8 +182,6 @@ const transporter = nodemailer.createTransport({
 
 try {
   console.log("📧 Sending email to:", email);
-  console.log("EMAIL:", process.env.EMAIL);
-  console.log("PASS exists:", !!process.env.EMAIL_PASS);
 
   await transporter.sendMail({
     from: process.env.EMAIL,
@@ -189,7 +190,23 @@ try {
     text: `Your verification code is: ${code}`
   });
 
-  console.log("✅ Email sent successfully");
+  console.log("✅ Email sent");
+
+  // ✅ SAVE CODE TO DATABASE
+  const newBuyer = await Buyer.create({
+    name,
+    email,
+    password: hashed,
+    profile,
+    verificationCode: code,
+    verificationExpires: Date.now() + 10 * 60 * 1000 // 10 mins
+  });
+
+  res.json({
+    success: true,
+    message: "Verification code sent to email",
+    email
+  });
 
 } catch (err) {
   console.log("🔥 FULL EMAIL ERROR:", err);
