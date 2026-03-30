@@ -971,7 +971,7 @@ const io = new Server(httpServer, {
     origin: "https://isonga-frontend.vercel.app",
     methods: ["GET", "POST"],
   },
-  transports: ['websocket', 'polling'],
+ transports: ["polling", "websocket"],
   pingTimeout: 60000, // Increase timeout for slower connections
 });
 // Store online users
