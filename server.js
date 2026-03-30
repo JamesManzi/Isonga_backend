@@ -589,43 +589,57 @@ app.get("/api/seller_profile",auth, async (req, res) => {
 
 app.get("/api/buyer_dashboard", auth, async (req, res) => {
   try {
-    const buyer = await Buyer.findById(req.userId);
+    // 1. Fetch Buyer (Ensure you only select what the frontend needs)
+    const buyer = await Buyer.findById(req.userId).select("name profile");
 
-    // Optimized: One single query to get sellers AND their calculated ratings
-    const sellersWithRatings = await Seller.aggregate([
-      {
-        $lookup: {
-          from: "ratings", // Must match your MongoDB collection name (usually lowercase/plural)
-          localField: "_id",
-          foreignField: "seller",
-          as: "allRatings"
-        }
-      },
-      {
-        $project: {
-          name: 1,
-          location: 1,
-          category: 1,
-          profile: 1,
-          files: 1,
-          description: 1,
-          numReviews: { $size: "$allRatings" },
-          averageRating: { 
-            $ifNull: [{ $avg: "$allRatings.rating" }, 0] 
-          }
-        }
-      }
-    ]);
+    if (!buyer) {
+      return res.status(404).json({ success: false, message: "Buyer not found" });
+    }
 
+    // 2. Fetch all sellers
+    const sellers = await Seller.find().select(
+      "name location category profile files description"
+    );
+
+    // 3. Map through sellers to attach ratings
+    // Using Promise.all is correct for parallel DB queries
+    const sellersWithRatings = await Promise.all(
+      sellers.map(async (seller) => {
+        // Ensure 'Rating' model is imported at the top of your file!
+        const ratings = await Rating.find({ seller: seller._id });
+        
+        const numReviews = ratings.length;
+        const averageRating = numReviews
+          ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
+          : 0;
+
+        // Use .toObject() to allow adding new properties to a Mongoose document
+        return {
+          ...seller.toObject(),
+          averageRating: Number(averageRating.toFixed(1)), // Round to 1 decimal place for stars
+          numReviews
+        };
+      })
+    );
+
+    // 4. Send response in the exact format your Frontend useEffect expects
     res.json({
       success: true,
-      buyer,
+      buyer: {
+        _id: buyer._id,
+        name: buyer.name,
+        profile: buyer.profile
+      },
       sellers: sellersWithRatings
     });
 
   } catch (error) {
-    console.error("Aggregation Error:", error);
-    res.status(500).json({ success: false, message: "Buyer Dashboard Server Error" });
+    console.error("Dashboard Route Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server Error", 
+      error: error.message 
+    });
   }
 });
 
