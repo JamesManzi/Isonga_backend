@@ -586,31 +586,36 @@ app.get("/api/seller_profile",auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Seller_Profile Server error" });
   }
 });
-app.get("/api/buyer_dashboard",auth, async (req, res) => {
-  try {
 
+app.get("/api/buyer_dashboard", auth, async (req, res) => {
+  try {
     const buyer = await Buyer.findById(req.userId);
 
-    // Fetch all sellers
-    const sellers = await Seller.find().select(
-      "name location category profile files description"
-    );
-
-    // Calculate averageRating and numReviews for each seller
-    const sellersWithRatings = await Promise.all(
-      sellers.map(async (seller) => {
-        const ratings = await Rating.find({ seller: seller._id });
-        const averageRating = ratings.length
-          ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
-          : 0;
-        const numReviews = ratings.length;
-        return {
-          ...seller.toObject(),
-          averageRating,
-          numReviews
-        };
-      })
-    );
+    // Optimized: One single query to get sellers AND their calculated ratings
+    const sellersWithRatings = await Seller.aggregate([
+      {
+        $lookup: {
+          from: "ratings", // Must match your MongoDB collection name (usually lowercase/plural)
+          localField: "_id",
+          foreignField: "seller",
+          as: "allRatings"
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          location: 1,
+          category: 1,
+          profile: 1,
+          files: 1,
+          description: 1,
+          numReviews: { $size: "$allRatings" },
+          averageRating: { 
+            $ifNull: [{ $avg: "$allRatings.rating" }, 0] 
+          }
+        }
+      }
+    ]);
 
     res.json({
       success: true,
@@ -619,7 +624,7 @@ app.get("/api/buyer_dashboard",auth, async (req, res) => {
     });
 
   } catch (error) {
-    console.log(error);
+    console.error("Aggregation Error:", error);
     res.status(500).json({ success: false, message: "Buyer Dashboard Server Error" });
   }
 });
