@@ -1811,14 +1811,12 @@ app.put("/api/notifications/mark-read", auth, async (req, res) => {
     const result = await Notification.updateMany(
       { 
         recipient: req.userId, 
-        read: false,
-        recipientModel: "Buyer" // <--- Crucial if you have both Sellers and Buyers
+        read: false
       },
       { $set: { read: true } }
     );
-    
-    // Check your terminal: if this says 0, your query criteria are wrong!
-    console.log("Documents updated:", result.modifiedCount); 
+
+    console.log("Documents updated:", result.modifiedCount);
 
     res.json({ success: true });
   } catch (err) {
