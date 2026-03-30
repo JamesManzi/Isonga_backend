@@ -1812,43 +1812,39 @@ app.get("/api/notifications/unread-count", auth, async (req, res) => {
   }
 });
 
-// --- NOTIFICATION ROUTES ---
-
-// 1. Get all notifications for the logged-in user
-app.get("/api/notifications", auth, async (req, res) => {
+// ==========================================
+// MARK ALL NOTIFICATIONS AS READ
+// ==========================================
+app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    const notifications = await Notification.find({ recipient: req.userId })
-      .sort({ createdAt: -1 });
-    res.json({ success: true, notifications });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Error fetching notifications" });
+    // req.userId comes from your 'auth' middleware
+    await Notification.updateMany(
+      { recipient: req.userId, status: "Unread" },
+      { $set: { status: "Read" } }
+    );
+
+    res.json({ success: true, message: "Notifications marked as read" });
+  } catch (error) {
+    console.error("Mark Read Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
-app.put("/api/notifications/mark-read", auth, async (req, res) => {
+// ==========================================
+// FETCH NOTIFICATIONS
+// ==========================================
+app.get("/api/notifications", auth, async (req, res) => {
   try {
-    const recipientId = new mongoose.Types.ObjectId(req.userId);
-
-    const result = await Notification.updateMany(
-      {
-        recipient: recipientId,
-        status: "Unread"
-      },
-      {
-        $set: { status: "Read" }
-      }
-    );
-
-    console.log(`Marked: ${result.modifiedCount}`);
+    const notifications = await Notification.find({ recipient: req.userId })
+      .sort({ createdAt: -1 })
+      .limit(20);
 
     res.json({
       success: true,
-      modifiedCount: result.modifiedCount
+      notifications
     });
-
-  } catch (err) {
-    console.error("Mark Read Error:", err);
-    res.status(500).json({ success: false });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Fetch Error" });
   }
 });
 
