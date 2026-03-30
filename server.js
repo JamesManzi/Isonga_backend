@@ -515,19 +515,21 @@ const todayEntry = seller.dailyViews.find(
 
 const todayViews = todayEntry ? todayEntry.buyers.length : 0;
 
-    res.json({
-      success: true,
-      seller: {
-        ...seller.toObject(),
-        totalOrders: totalActivityCount, // This maps to "Bookings" in your frontend if type is Service
-        newOrders: newActivityCount,
-        averageRating: Number(averageRating.toFixed(1)), 
-        numReviews: numReviews,
-        totalItemsCount: totalItemsCount
-      },
-      totalViews,
-      todayViews
-    });
+    // Current problematic part in your backend:
+res.json({
+  success: true,
+  seller: {
+    ...seller.toObject(),
+    totalOrders: totalActivityCount,
+    newOrders: newActivityCount,
+    // averageRating is being calculated, but let's make sure it's inside 'seller'
+    averageRating: Number(averageRating.toFixed(1)), 
+    numReviews: numReviews,
+    totalItemsCount: totalItemsCount
+  },
+  totalViews,
+  todayViews
+});
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false,message:"Dashboard Internal Server Error" });
