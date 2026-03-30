@@ -1826,12 +1826,18 @@ app.put("/api/notifications/mark-read", auth, async (req, res) => {
   }
 });
 
-// ✅ CORRECTED: FETCH NOTIFICATIONS (Added populate for sender info)
 app.get("/api/notifications", auth, async (req, res) => {
   try {
-    // It's helpful to 'populate' the sender so you can show the seller's name/profile in the list
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
     const notifications = await Notification.find({ recipient: req.userId })
-      .populate("sender", "name profile") 
+      .populate({
+        path: "sender",
+        select: "name profile",
+        options: { strictPopulate: false } // ✅ prevents crash from old data
+      })
       .sort({ createdAt: -1 })
       .limit(20);
 
@@ -1839,9 +1845,10 @@ app.get("/api/notifications", auth, async (req, res) => {
       success: true,
       notifications
     });
+
   } catch (error) {
-    console.error("Fetch Notif Error:", error);
-    res.status(500).json({ success: false, message: "Fetch Error" });
+    console.error("🔥 Fetch Notif Error FULL:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

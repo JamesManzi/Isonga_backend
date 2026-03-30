@@ -1,15 +1,37 @@
 const mongoose = require("mongoose");
+
 const notificationSchema = new mongoose.Schema({
-  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'Buyer', required: true },
-  message: { type: String, required: true },
-  orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+  recipient: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Buyer', 
+    required: true 
+  },
+
+  sender: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Seller',   // ✅ MUST match your Seller model name
+    required: true 
+  },
+
+  message: { 
+    type: String, 
+    required: true 
+  },
+
+  orderId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Order' 
+  },
 
   read: { 
     type: Boolean, 
     default: false 
   },
 
-  createdAt: { type: Date, default: Date.now }
-});
+  category: {
+    type: String
+  }
 
-module.exports=mongoose.model("Notification",notificationSchema);
+}, { timestamps: true }); // ✅ replaces createdAt manually
+
+module.exports = mongoose.model("Notification", notificationSchema);
