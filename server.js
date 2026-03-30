@@ -1753,19 +1753,19 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
       read: false 
     });
 
-    // 3. Emit using req.io (Assuming middleware is set)
-    const buyerKey = `Buyer_${item.buyer}`;
-    if (req.io) {
-      req.io.to(buyerKey).emit("new_notification", {
-        _id: newNotif._id,
-        message: notificationMessage,
-        unreadCount: unreadCount,
-        orderId: item._id,
-        status: status,
-        type: type,
-        createdAt: newNotif.createdAt
-      });
-    }
+    const buyerSocket = onlineUsers.get(buyerKey);
+
+if (buyerSocket) {
+  io.to(buyerSocket).emit("new_notification", {
+    _id: newNotif._id,
+    message: notificationMessage,
+    unreadCount: unreadCount,
+    orderId: item._id,
+    status: status,
+    type: type,
+    createdAt: newNotif.createdAt
+  });
+}
 
     res.json({
       success: true,
