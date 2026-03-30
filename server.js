@@ -1721,91 +1721,76 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
     const id = req.params.id;
-    const { status, type } = req.body; 
+    const { status } = req.body;
 
-    // 1. Validation: Ensure type is sent from frontend (Product or Service)
-    if (!type) {
-      return res.status(400).json({ success: false, message: "Type (Product/Service) is required" });
-    }
-
-    const Model = type === "Service" ? Booking : Order;
-    const item = await Model.findById(id);
+    const item = await Order.findById(id);
 
     if (!item) {
-      return res.status(404).json({ success: false, message: "Record not found" });
+      return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // 2. Security Check
-    const isOwner = type === "Service" 
-      ? item.seller.toString() === sellerId
-      : (item.seller ? item.seller.toString() === sellerId : item.items.some(i => i.seller.toString() === sellerId));
+    // Check ownership
+    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
 
     if (!isOwner) {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
-    // 3. Prevent redundant updates
+    // Prevent duplicate updates
     if (item.status !== "Pending") {
       return res.json({ success: false, message: `Already ${item.status}` });
     }
 
-    // 4. Update the record
+    // Update status
     item.status = status;
     await item.save();
 
-    // 5. Notification Logic
     const displayId = item._id.toString().slice(-6).toUpperCase();
-    const actionText = type === "Service" ? "booking" : "order";
-    const notificationMessage = status === "Accepted" 
-      ? `✅ Your ${actionText} #${displayId} has been accepted!` 
-      : `❌ Your ${actionText} #${displayId} was declined.`;
 
-    // Create Notification in DB
+    const notificationMessage =
+      status === "Accepted"
+        ? `✅ Your order #${displayId} has been accepted!`
+        : `❌ Your order #${displayId} was declined.`;
+
     const newNotif = await Notification.create({
       recipient: item.buyer,
       sender: sellerId,
       message: notificationMessage,
       orderId: item._id,
       read: false,
-      category: type 
+      category: "Order"
     });
 
-    // 6. Real-time Socket Notification
-    // ✅ FIX: Define buyerKey properly
     const buyerKey = `Buyer_${item.buyer}`;
     const buyerSocket = onlineUsers.get(buyerKey);
 
     if (buyerSocket) {
-      // Get fresh unread count for this specific buyer
-      const unreadCount = await Notification.countDocuments({ 
-        recipient: item.buyer, 
-        read: false 
+      const unreadCount = await Notification.countDocuments({
+        recipient: item.buyer,
+        read: false
       });
 
       io.to(buyerSocket).emit("new_notification", {
         _id: newNotif._id,
         message: notificationMessage,
-        unreadCount: unreadCount,
+        unreadCount,
         orderId: item._id,
-        status: status,
-        type: type,
+        status,
         createdAt: newNotif.createdAt
       });
     }
 
     res.json({
       success: true,
-      message: `${type} ${status.toLowerCase()} successfully`,
+      message: `Order ${status.toLowerCase()} successfully`,
       data: item
     });
 
   } catch (err) {
-    // Log the actual error to your terminal so you can see it!
     console.error("🔥 Status Update Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-
 // ✅ CORRECTED: MARK ALL NOTIFICATIONS AS READ
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
