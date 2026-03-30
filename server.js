@@ -1720,66 +1720,78 @@ app.get("/api/orders/my-orders", auth, async (req, res) => {
 app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
-    const { status, type } = req.body;
     const id = req.params.id;
+    const { status, type } = req.body; 
+
+    // 1. Validation: Ensure type is sent from frontend (Product or Service)
+    if (!type) {
+      return res.status(400).json({ success: false, message: "Type (Product/Service) is required" });
+    }
 
     const Model = type === "Service" ? Booking : Order;
-    
-    // Use .populate('buyer') if you want to send the buyer's name in the emit
     const item = await Model.findById(id);
 
-    if (!item) return res.status(404).json({ success: false, message: "Record not found" });
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Record not found" });
+    }
 
-    // Improved Security Check
+    // 2. Security Check
     const isOwner = type === "Service" 
       ? item.seller.toString() === sellerId
       : (item.seller ? item.seller.toString() === sellerId : item.items.some(i => i.seller.toString() === sellerId));
 
-    if (!isOwner) return res.status(403).json({ success: false, message: "Not authorized" });
+    if (!isOwner) {
+      return res.status(403).json({ success: false, message: "Not authorized" });
+    }
 
+    // 3. Prevent redundant updates
     if (item.status !== "Pending") {
       return res.json({ success: false, message: `Already ${item.status}` });
     }
 
+    // 4. Update the record
     item.status = status;
     await item.save();
 
-    // Notification Logic
+    // 5. Notification Logic
     const displayId = item._id.toString().slice(-6).toUpperCase();
     const actionText = type === "Service" ? "booking" : "order";
     const notificationMessage = status === "Accepted" 
       ? `✅ Your ${actionText} #${displayId} has been accepted!` 
       : `❌ Your ${actionText} #${displayId} was declined.`;
 
-    // 1. Create DB Notification
+    // Create Notification in DB
     const newNotif = await Notification.create({
       recipient: item.buyer,
       sender: sellerId,
       message: notificationMessage,
       orderId: item._id,
       read: false,
-      category: type // Added this for frontend filtering
+      category: type 
     });
 
-    // 2. Count unread
-    const unreadCount = await Notification.countDocuments({ 
-      recipient: item.buyer, 
-      read: false 
-    });
-
+    // 6. Real-time Socket Notification
+    // ✅ FIX: Define buyerKey properly
+    const buyerKey = `Buyer_${item.buyer}`;
     const buyerSocket = onlineUsers.get(buyerKey);
 
-if (buyerSocket) {
-  io.to(buyerSocket).emit("new_notification", {
-    _id: newNotif._id,
-    message: notificationMessage,
-    unreadCount: unreadCount,
-    orderId: item._id,
-    status: status,
-    type: type,
-    createdAt: newNotif.createdAt
-  });
-}
+    if (buyerSocket) {
+      // Get fresh unread count for this specific buyer
+      const unreadCount = await Notification.countDocuments({ 
+        recipient: item.buyer, 
+        read: false 
+      });
+
+      io.to(buyerSocket).emit("new_notification", {
+        _id: newNotif._id,
+        message: notificationMessage,
+        unreadCount: unreadCount,
+        orderId: item._id,
+        status: status,
+        type: type,
+        createdAt: newNotif.createdAt
+      });
+    }
 
     res.json({
       success: true,
@@ -1788,54 +1800,38 @@ if (buyerSocket) {
     });
 
   } catch (err) {
-    console.error("Status Update Error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    // Log the actual error to your terminal so you can see it!
+    console.error("🔥 Status Update Error:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
-// GET UNREAD NOTIFICATION COUNT
-app.get("/api/notifications/unread-count", auth, async (req, res) => {
-  try {
-    // This counts unread notifications for the logged-in user
-    const count = await Notification.countDocuments({ 
-      recipient: req.userId, 
-      read: false 
-    });
-    
-    res.json({ 
-      success: true, 
-      count 
-    });
-  } catch (err) {
-    console.error("Notification Count Error:", err);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-// ==========================================
-// MARK ALL NOTIFICATIONS AS READ
-// ==========================================
+// ✅ CORRECTED: MARK ALL NOTIFICATIONS AS READ
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    // req.userId comes from your 'auth' middleware
-    await Notification.updateMany(
-      { recipient: req.userId, status: "Unread" },
-      { $set: { status: "Read" } }
+    // We update based on the 'read' boolean to match your unread-count route
+    const result = await Notification.updateMany(
+      { recipient: req.userId, read: false }, 
+      { $set: { read: true } }
     );
 
-    res.json({ success: true, message: "Notifications marked as read" });
+    res.json({ 
+      success: true, 
+      message: "Notifications marked as read",
+      modifiedCount: result.modifiedCount 
+    });
   } catch (error) {
     console.error("Mark Read Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
-// ==========================================
-// FETCH NOTIFICATIONS
-// ==========================================
+// ✅ CORRECTED: FETCH NOTIFICATIONS (Added populate for sender info)
 app.get("/api/notifications", auth, async (req, res) => {
   try {
+    // It's helpful to 'populate' the sender so you can show the seller's name/profile in the list
     const notifications = await Notification.find({ recipient: req.userId })
+      .populate("sender", "name profile") 
       .sort({ createdAt: -1 })
       .limit(20);
 
@@ -1844,7 +1840,22 @@ app.get("/api/notifications", auth, async (req, res) => {
       notifications
     });
   } catch (error) {
+    console.error("Fetch Notif Error:", error);
     res.status(500).json({ success: false, message: "Fetch Error" });
+  }
+});
+
+// ✅ THIS ONE WAS ALREADY CORRECT
+app.get("/api/notifications/unread-count", auth, async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({ 
+      recipient: req.userId, 
+      read: false 
+    });
+    
+    res.json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ success: false });
   }
 });
 
