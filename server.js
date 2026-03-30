@@ -1995,30 +1995,73 @@ app.get("/api/seller/bookings",auth, async (req, res) => {
   }
 });
 
-// 2. UPDATE booking status
-app.put("/api/bookings/:id",auth, async (req, res) => {
+app.put("/api/bookings/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
     const sellerId = req.userId;
 
-    if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
+    if (!sellerId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
 
     const validStatuses = ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"];
     if (!validStatuses.includes(status)) {
-      return res.json({ success: false, message: "Invalid status type" });
+      return res.status(400).json({ success: false, message: "Invalid status type" });
     }
 
     const updatedBooking = await Booking.findOneAndUpdate(
       { _id: id, seller: sellerId },
-      { status, seen: true }, 
+      { status, seen: true },
       { new: true }
     );
 
-    if (!updatedBooking) return res.json({ success: false, message: "Booking not found" });
+    if (!updatedBooking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    // ✅ CREATE NOTIFICATION
+    const displayId = updatedBooking._id.toString().slice(-6).toUpperCase();
+
+    const notificationMessage =
+      status === "Accepted"
+        ? `✅ Your booking #${displayId} has been accepted!`
+        : `❌ Your booking #${displayId} was declined.`;
+
+    const newNotif = await Notification.create({
+      recipient: updatedBooking.buyer,   // ⚠️ MUST exist in Booking schema
+      sender: sellerId,
+      message: notificationMessage,
+      orderId: updatedBooking._id,
+      read: false,
+      category: "Booking"
+    });
+
+    // ✅ SOCKET REAL-TIME
+    const buyerKey = `Buyer_${updatedBooking.buyer}`;
+    const buyerSocket = onlineUsers.get(buyerKey);
+
+    if (buyerSocket) {
+      const unreadCount = await Notification.countDocuments({
+        recipient: updatedBooking.buyer,
+        read: false
+      });
+
+      io.to(buyerSocket).emit("new_notification", {
+        _id: newNotif._id,
+        message: notificationMessage,
+        unreadCount,
+        orderId: updatedBooking._id,
+        status,
+        type: "Booking",
+        createdAt: newNotif.createdAt
+      });
+    }
 
     res.json({ success: true, booking: updatedBooking });
+
   } catch (error) {
+    console.error("🔥 Booking Update Error:", error);
     res.status(500).json({ success: false, message: "Update Error" });
   }
 });
