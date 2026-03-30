@@ -1827,26 +1827,28 @@ app.get("/api/notifications", auth, async (req, res) => {
 
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
-    // 1. Convert the string ID from the token into a MongoDB ObjectId
     const recipientId = new mongoose.Types.ObjectId(req.userId);
 
     const result = await Notification.updateMany(
-      { 
-        recipient: recipientId, 
-        read: false
+      {
+        recipient: recipientId,
+        status: "Unread"
       },
-      { $set: { read: true } }
+      {
+        $set: { status: "Read" }
+      }
     );
 
-    console.log(`User ${req.userId}: ${result.modifiedCount} notifications marked as read.`);
+    console.log(`Marked: ${result.modifiedCount}`);
 
-    res.json({ 
-      success: true, 
-      modifiedCount: result.modifiedCount 
+    res.json({
+      success: true,
+      modifiedCount: result.modifiedCount
     });
+
   } catch (err) {
     console.error("Mark Read Error:", err);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false });
   }
 });
 
