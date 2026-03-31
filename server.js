@@ -1793,6 +1793,43 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
+
+app.get("/api/orders/:id", auth, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+
+    const order = await Order.findById(orderId)
+      .populate("items.product");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // ✅ Ensure only the buyer can view
+    if (order.buyer.toString() !== req.userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
+    res.json({
+      success: true,
+      order,
+    });
+
+  } catch (err) {
+    console.error("🔥 Fetch Order Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
 // ✅ CORRECTED: MARK ALL NOTIFICATIONS AS READ
 app.put("/api/notifications/mark-read", auth, async (req, res) => {
   try {
