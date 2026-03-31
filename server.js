@@ -1794,25 +1794,31 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
   }
 });
 
+// ✅ Add this route to handle fetching a single order by ID
 app.get("/api/orders/:id", auth, async (req, res) => {
   try {
     const orderId = req.params.id;
 
-    const order = await Order.findById(orderId)
-      .populate("items.product");
+    // Find the order and populate product details
+    const order = await Order.findById(orderId).populate("items.product");
 
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found",
+        message: "Order not found in database",
       });
     }
 
-    // ✅ Ensure only the buyer can view
-    if (order.buyer.toString() !== req.userId.toString()) {
+    // Security: Ensure the person requesting is either the Buyer or the Seller of this order
+    const isBuyer = order.buyer.toString() === req.userId.toString();
+    
+    // Check if the seller is involved in any item of this order
+    const isSeller = order.items.some(item => item.seller.toString() === req.userId.toString());
+
+    if (!isBuyer && !isSeller) {
       return res.status(403).json({
         success: false,
-        message: "Not authorized",
+        message: "Not authorized to view this order",
       });
     }
 
@@ -1820,12 +1826,11 @@ app.get("/api/orders/:id", auth, async (req, res) => {
       success: true,
       order,
     });
-
   } catch (err) {
     console.error("🔥 Fetch Order Error:", err);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Server error while fetching order",
     });
   }
 });
