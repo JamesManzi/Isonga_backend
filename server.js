@@ -2110,6 +2110,46 @@ app.put("/api/bookings/:id", auth, async (req, res) => {
   }
 });
 
+// ✅ GET SINGLE BOOKING (FIX)
+app.get("/api/bookings/:id", auth, async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+
+    const booking = await Booking.findById(bookingId)
+      .populate("product");
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    // ✅ Security check (same as order)
+    const isBuyer = booking.buyer.toString() === req.userId.toString();
+    const isSeller = booking.seller.toString() === req.userId.toString();
+
+    if (!isBuyer && !isSeller) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to view this booking",
+      });
+    }
+
+    res.json({
+      success: true,
+      booking,
+    });
+
+  } catch (err) {
+    console.error("🔥 Fetch Booking Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching booking",
+    });
+  }
+});
+
 app.put("/api/update_buyer_profile",auth, upload.single("profile"), async (req,res)=>{
 
 try{
