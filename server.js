@@ -2076,7 +2076,7 @@ app.put("/api/bookings/:id", auth, async (req, res) => {
       recipient: updatedBooking.buyer,   // ⚠️ MUST exist in Booking schema
       sender: sellerId,
       message: notificationMessage,
-      orderId: updatedBooking._id,
+      bookingId: updatedBooking._id,
       read: false,
       category: "Booking"
     });
