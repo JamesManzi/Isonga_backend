@@ -22,14 +22,18 @@ const notificationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Order' 
   },
-
+  bookingId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Booking'   // ✅ ADD THIS
+  },
   read: { 
     type: Boolean, 
     default: false 
   },
 
   category: {
-    type: String
+    type: String,
+    enum: ["Order", "Booking"]  // ✅ IMPORTANT (prevents bugs)
   }
 
 }, { timestamps: true }); // ✅ replaces createdAt manually
