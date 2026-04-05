@@ -22,7 +22,7 @@ const Notification = require("./models/Notification");
 const rateLimit = require("express-rate-limit");
 // Creating App
 const app=express();
-app.use('/api/login', loginLimiter);
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5,                   // 5 attempts
