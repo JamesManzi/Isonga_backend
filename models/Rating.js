@@ -10,7 +10,11 @@ const ratingSchema = new mongoose.Schema({
     ref: "Buyer"
   },
   rating: Number,
-  comment: String
+  comment: String,
+  sellerReply: {
+    type: String,
+    default: ""
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Rating", ratingSchema);

@@ -23,7 +23,7 @@ const Notification = require("./models/Notification");
 const app=express();
 //Cross Origin Configure
 app.use(cors({
-  origin: "https://isonga-frontend.vercel.app",
+  origin:process.env.ALLOWED_ORIGINS,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: false
@@ -929,6 +929,48 @@ app.put(
     }
   }
 );
+
+// =========================
+// SELLER REPLY TO RATING
+// =========================
+app.put("/api/ratings/:id/reply", auth, async (req, res) => {
+  try {
+    const { reply } = req.body;
+    const ratingId = req.params.id;
+
+    // Ensure the user is a seller
+    if (req.role !== "seller") {
+      return res.status(403).json({ success: false, message: "Only sellers can reply to ratings" });
+    }
+
+    // Update the rating document
+    const updatedRating = await Rating.findOneAndUpdate(
+      { _id: ratingId, seller: req.userId }, // Ensure the rating belongs to this seller
+      { sellerReply: reply },
+      { new: true }
+    );
+
+    if (!updatedRating) {
+      return res.status(404).json({ success: false, message: "Rating not found or unauthorized" });
+    }
+
+    // Optional: If you use Socket.io for live updates
+    io.emit("sellerReplyAdded", {
+      ratingId: updatedRating._id,
+      sellerReply: updatedRating.sellerReply
+    });
+
+    res.json({
+      success: true,
+      message: "Reply added successfully",
+      rating: updatedRating
+    });
+
+  } catch (error) {
+    console.error("Reply Error:", error);
+    res.status(500).json({ success: false, message: "Server error while replying" });
+  }
+});
 
    app.delete("/api/delete_location_image/:filename",auth, async (req, res) => {
   try {
@@ -2320,7 +2362,7 @@ app.post("/api/logout", (req, res) => {
 });
 // START SERVER
 // ==============================
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT;
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
 });
