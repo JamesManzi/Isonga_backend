@@ -19,8 +19,21 @@ const jwt = require("jsonwebtoken");
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 const Notification = require("./models/Notification");
+const rateLimit = require("express-rate-limit");
 // Creating App
 const app=express();
+app.use('/api/login', loginLimiter);
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,                   // 5 attempts
+  message: { 
+    success: false, 
+    message: "Too many login attempts, please try again after 15 minutes" 
+  },
+  standardHeaders: true,    // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false,     // Disable the `X-RateLimit-*` headers
+});
+
 //Cross Origin Configure
 app.use(cors({
   origin:process.env.ALLOWED_ORIGINS,
@@ -35,6 +48,9 @@ app.use(express.urlencoded({ extended: true }));
 const { upload } = require('./cloudinary');
 // Session Configure
 app.set("trust proxy", 1); // Help Https Work Well
+
+app.use('/api/login', loginLimiter);
+app.use('/api/buyer_login', loginLimiter)
 const auth = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
