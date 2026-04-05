@@ -23,15 +23,25 @@ const rateLimit = require("express-rate-limit");
 // Creating App
 const app=express();
 
+app.set("trust proxy", 1);
+
+// ✅ Login limiter (define FIRST)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,                   // 5 attempts
-  message: { 
-    success: false, 
-    message: "Too many login attempts, please try again after 15 minutes" 
+  max: 5, // 5 attempts
+
+  message: {
+    success: false,
+    message: "Too many login attempts, please try again after 15 minutes"
   },
-  standardHeaders: true,    // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false,     // Disable the `X-RateLimit-*` headers
+
+  standardHeaders: true,
+  legacyHeaders: false,
+
+  // 🔥 Better: limit by email + IP (not just IP)
+  keyGenerator: (req) => {
+    return (req.body.email || "unknown") + "-" + req.ip;
+  },
 });
 
 //Cross Origin Configure
@@ -46,11 +56,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Store Uploads
 const { upload } = require('./cloudinary');
-// Session Configure
-app.set("trust proxy", 1); // Help Https Work Well
 
 app.use('/api/login', loginLimiter);
-app.use('/api/buyer_login', loginLimiter)
+app.use('/api/buyer_login', loginLimiter);
+
 const auth = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
