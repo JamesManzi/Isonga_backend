@@ -1346,6 +1346,33 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
     console.error("Delete Error:", err);
   }
 });
+
+socket.on("deleteConversation", async ({ room }) => {
+  try {
+    const userId = socket.userId;
+    if (!userId || !room) return;
+
+    const Conversation = require("./models/Conversation");
+
+    // mark deleted for THIS user only
+    await Conversation.findOneAndUpdate(
+      { room },
+      {
+        $addToSet: {
+          deletedFor: userId,
+        },
+      }
+    );
+
+    // notify this user only
+    io.to(socket.userKey).emit("conversationDeleted", {
+      room,
+    });
+
+  } catch (err) {
+    console.error("deleteConversation error:", err);
+  }
+});
   // =========================
   // USER DISCONNECT
   // =========================
@@ -1367,24 +1394,23 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
 
 });
 
-// Add this to your backend routes (e.g., in routes/chat.js or server.js)
-app.delete("/api/conversations/:room", async (req, res) => {
+app.get("/api/buyer/conversations", auth, async (req, res) => {
   try {
-    const { room } = req.params;
-    const userId = req.user._id; // Ensure your auth middleware provides req.user
+    const buyerId = req.user.id;
 
-    // We don't delete the messages, we just mark this room as "hidden" for this user
-    // You'll need to update your GET /api/buyer/conversations to filter these out
-    await Conversation.findOneAndUpdate(
-      { room },
-      { $addToSet: { deletedBy: userId } },
-      { upsert: true }
-    );
+    const Conversation = require("./models/Conversation");
 
-    res.status(200).json({ success: true, message: "Conversation hidden" });
-  } catch (error) {
-    console.error("Delete Error:", error);
-    res.status(500).json({ success: false, error: "Internal Server Error" });
+    const conversations = await Conversation.find({
+      buyerId,
+      deletedFor: { $ne: buyerId }, // 👈 HIDE DELETED ONES
+    }).sort({ updatedAt: -1 });
+
+    res.json({
+      success: true,
+      conversations,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false });
   }
 });
 // Add this to your server.js
