@@ -1114,7 +1114,21 @@ const io = new Server(httpServer, {
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
 const onlineUsers = new Map();
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
 
+    if (!token) return next(new Error("Unauthorized"));
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    socket.userId = decoded.id; // ✅ REQUIRED
+
+    next();
+  } catch (err) {
+    next(new Error("Invalid token"));
+  }
+});
 io.on("connection", (socket) => {
 
   console.log("New socket connected:", socket.id);
@@ -1122,13 +1136,18 @@ io.on("connection", (socket) => {
   // =========================
   // USER ONLINE
   // =========================
-  socket.on("userOnline", ({ userId, userModel }) => {
+  socket.on("userOnline", ({ userModel }) => {
 
-  if (!userId || !userModel) return;
+  if (!socket.userId || !userModel) return;
 
-  const key = `${userModel}_${userId}`;
+  const key = `${userModel}_${socket.userId}`;
 
-  onlineUsers.set(key, socket.id);
+  if (!onlineUsers.has(key)) {
+  onlineUsers.set(key, new Set());
+}
+
+onlineUsers.get(key).add(socket.id);
+  socket.userKey = key;
 
   socket.join(key); // ✅ IMPORTANT
 
@@ -1179,7 +1198,6 @@ socket.on("sendMessage", async (data) => {
       replyTo: replyTo || null,     // Saves the ID of the message being replied to
       read: false
     });
-
     // 3. IMPORTANT: Populate the replyTo and productId fields 
     // This ensures the receiver gets the actual TEXT of the reply, not just an ID.
     const populatedMessage = await Message.findById(newMessage._id)
@@ -1207,24 +1225,38 @@ socket.on("sendMessage", async (data) => {
 
     // 6. Emit notification to receiver
     const receiverKey = `${receiverModel}_${receiver}`;
-    const receiverSocket = onlineUsers.get(receiverKey);
-    if (receiverSocket) {
-      io.to(receiverSocket).emit("newMessageNotification", {
-        room,
-        sender,
-        senderModel,
-        receiver,
-        receiverModel,
-        message,
-        unreadCount,
-        replyTo: messageData.replyTo, // Include reply data in notification
-        createdAt: newMessage.createdAt
-      });
-    }
+    const receiverSockets = onlineUsers.get(receiverKey);
+
+if (receiverSockets) {
+  receiverSockets.forEach(socketId => {
+    io.to(socketId).emit("newMessageNotification", {
+      room,
+      sender,
+      senderModel,
+      receiver,
+      receiverModel,
+      message,
+      unreadCount,
+      replyTo: messageData.replyTo,
+      createdAt: newMessage.createdAt
+    });
+  });
+}
 
   } catch (error) {
     console.error("SendMessage Error:", error);
   }
+});
+
+// =========================
+// TYPING INDICATOR
+// =========================
+socket.on("typing", ({ room, sender }) => {
+  socket.to(room).emit("typing", { sender });
+});
+
+socket.on("stopTyping", ({ room }) => {
+  socket.to(room).emit("stopTyping");
 });
 
 app.post("/api/chat/upload",auth, upload.array("files",10), (req,res)=>{
@@ -1273,6 +1305,45 @@ socket.on("messagesRead", async ({ room }) => {
     console.error("messagesRead Error:", err);
   }
 });
+// =========================
+// DELETE MESSAGE
+// =========================
+socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
+  try {
+    const message = await Message.findById(messageId);
+
+    if (!message) return;
+
+    if (forEveryone) {
+      // Only sender can delete for everyone
+      if (message.sender.toString() !== socket.userId) return;
+
+      message.message = "This message was deleted";
+      message.files = [];
+      message.deletedForEveryone = true;
+
+    } else {
+      // Delete only for current user
+      message.deletedFor = message.deletedFor || [];
+
+      if (!message.deletedFor.includes(socket.userId)) {
+        message.deletedFor.push(socket.userId);
+      }
+    }
+
+    await message.save();
+
+    // Emit to room
+    io.to(room).emit("messageDeleted", {
+      messageId,
+      forEveryone,
+      userId: socket.userId
+    });
+
+  } catch (err) {
+    console.error("Delete Error:", err);
+  }
+});
   // =========================
   // USER DISCONNECT
   // =========================
@@ -1280,9 +1351,15 @@ socket.on("messagesRead", async ({ room }) => {
 
     console.log("Socket disconnected:", socket.id);
 
-    if (socket.userKey) {
-      onlineUsers.delete(socket.userKey);
-    }
+   if (socket.userKey && onlineUsers.has(socket.userKey)) {
+  const userSockets = onlineUsers.get(socket.userKey);
+
+  userSockets.delete(socket.id);
+
+  if (userSockets.size === 0) {
+    onlineUsers.delete(socket.userKey);
+  }
+}
 
   });
 

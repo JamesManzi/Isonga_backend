@@ -46,7 +46,8 @@ const messageSchema = new mongoose.Schema(
         type: String
       }
     ],
-
+     deletedFor: [{ type: mongoose.Schema.Types.ObjectId }],
+  deletedForEveryone: { type: Boolean, default: false },
     // --- MOVE THESE INSIDE THE MAIN BRACES ---
     replyTo: { 
       type: mongoose.Schema.Types.ObjectId, 
