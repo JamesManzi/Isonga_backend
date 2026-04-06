@@ -1249,13 +1249,19 @@ if (receiverSockets) {
 });
 
 // =========================
-// TYPING INDICATOR
+// TYPING INDICATOR (FIXED)
 // =========================
-socket.on("typing", ({ room, sender }) => {
-  socket.to(room).emit("typing", { sender });
+socket.on("typing", ({ room, senderId }) => {
+  if (!room || !senderId) return;
+
+  socket.to(room).emit("typing", {
+    senderId,
+  });
 });
 
 socket.on("stopTyping", ({ room }) => {
+  if (!room) return;
+
   socket.to(room).emit("stopTyping");
 });
 
@@ -1305,39 +1311,35 @@ socket.on("messagesRead", async ({ room }) => {
     console.error("messagesRead Error:", err);
   }
 });
-// =========================
-// DELETE MESSAGE
-// =========================
+
 socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
   try {
     const message = await Message.findById(messageId);
 
     if (!message) return;
 
+    const userId = socket.userId;
+
     if (forEveryone) {
       // Only sender can delete for everyone
-      if (message.sender.toString() !== socket.userId) return;
+      if (message.sender.toString() !== userId) return;
 
-      message.message = "This message was deleted";
-      message.files = [];
-      message.deletedForEveryone = true;
-
+      await Message.findByIdAndUpdate(messageId, {
+        message: "This message was deleted",
+        files: [],
+        deletedForEveryone: true,
+      });
     } else {
-      // Delete only for current user
-      message.deletedFor = message.deletedFor || [];
-
-      if (!message.deletedFor.includes(socket.userId)) {
-        message.deletedFor.push(socket.userId);
-      }
+      // Delete only for current user (SAFE FIX)
+      await Message.findByIdAndUpdate(messageId, {
+        $addToSet: { deletedFor: userId },
+      });
     }
 
-    await message.save();
-
-    // Emit to room
     io.to(room).emit("messageDeleted", {
       messageId,
       forEveryone,
-      userId: socket.userId
+      userId,
     });
 
   } catch (err) {
