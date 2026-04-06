@@ -269,68 +269,96 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
         return res.status(500).json({ success: false, message: "Server Error" });
     }
 });
-
 app.post("/api/resend-verification", async (req, res) => {
-    try {
-        const { email } = req.body;
+  try {
+    const { email, userType } = req.body;
 
-        // 1. Search in both collections
-        let user = await Seller.findOne({ email });
-        let userType = "Seller";
-
-        if (!user) {
-            user = await Buyer.findOne({ email });
-            userType = "Buyer";
-        }
-
-        // 2. If neither has the email, return error
-        if (!user) {
-            return res.json({ success: false, message: "User not found" });
-        }
-
-        // 3. Check if they are already verified (No need to send a code if they are)
-        if (user.isVerified) {
-            return res.json({ success: false, message: "Account already verified. Please login." });
-        }
-
-        // 4. Generate a NEW 6-digit code
-        const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // 5. Update the found user (Mongoose identifies if it's Buyer or Seller automatically here)
-        user.verificationCode = newCode;
-        user.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-        await user.save();
-
-        // 6. Send the new email via Resend API
-        const { data, error } = await resend.emails.send({
-            from: 'Isonga Market <onboarding@resend.dev>',
-            to: email,
-            subject: `New Verification Code for ${userType} Account`,
-            html: `
-                <div style="font-family: sans-serif; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px;">
-                    <h2 style="color: #2563eb;">Isonga Market</h2>
-                    <p>Hello ${user.name},</p>
-                    <p>You requested a new verification code for your <strong>${userType}</strong> account.</p>
-                    <div style="font-size: 24px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 10px 20px; margin: 10px 0;">
-                        ${newCode}
-                    </div>
-                    <p style="color: #64748b; font-size: 14px;">This code will expire in 10 minutes and replaces any previous codes.</p>
-                </div>
-            `
-        });
-
-        if (error) {
-            return res.status(400).json({ success: false, message: "Email delivery failed" });
-        }
-
-        res.json({ success: true, message: `New code sent to your ${userType} email!` });
-
-    } catch (error) {
-        console.error("Resend Error:", error);
-        res.status(500).json({ success: false, message: "Internal Server Error" });
+    // 🔴 Validate input
+    if (!email || !userType) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and user type are required"
+      });
     }
-});
 
+    console.log("Resend request:", { email, userType });
+
+    // ✅ Choose correct model
+    const Model = userType === "seller" ? Seller : Buyer;
+
+    // 🔍 Find user
+    const user = await Model.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // 🚫 Already verified
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Account already verified. Please login."
+      });
+    }
+
+    // 🔢 Generate new code
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 💾 Save new code
+    user.verificationCode = newCode;
+    user.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+
+    console.log("New verification code:", newCode);
+
+    // 📧 Send email
+    const { data, error } = await resend.emails.send({
+      from: "Isonga Market <onboarding@resend.dev>",
+      to: email,
+      subject: "Your New Verification Code",
+      html: `
+        <div style="font-family: sans-serif; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px;">
+          <h2 style="color: #2563eb;">Isonga Market</h2>
+          <p>Hello ${user.name || "User"},</p>
+          <p>You requested a new verification code for your <strong>${userType}</strong> account.</p>
+          
+          <div style="font-size: 24px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 10px 20px; margin: 10px 0;">
+            ${newCode}
+          </div>
+
+          <p style="color: #64748b; font-size: 14px;">
+            This code will expire in 10 minutes and replaces any previous codes.
+          </p>
+        </div>
+      `
+    });
+
+    // ❌ Email failed
+    if (error) {
+      console.error("Resend email error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Email delivery failed"
+      });
+    }
+
+    // ✅ Success
+    return res.json({
+      success: true,
+      message: "New verification code sent successfully!"
+    });
+
+  } catch (error) {
+    console.error("Resend route error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
+  }
+});
 app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
