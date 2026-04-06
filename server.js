@@ -1393,26 +1393,6 @@ socket.on("deleteConversation", async ({ room }) => {
   });
 
 });
-
-app.get("/api/buyer/conversations", auth, async (req, res) => {
-  try {
-    const buyerId = req.user.id;
-
-    const Conversation = require("./models/Conversation");
-
-    const conversations = await Conversation.find({
-      buyerId,
-      deletedFor: { $ne: buyerId }, // 👈 HIDE DELETED ONES
-    }).sort({ updatedAt: -1 });
-
-    res.json({
-      success: true,
-      conversations,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false });
-  }
-});
 // Add this to your server.js
 app.get("/api/get_buyer/:id",auth, async (req, res) => {
   try {
