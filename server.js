@@ -25,7 +25,32 @@ const app=express();
 
 app.set("trust proxy", 1);
 
-// ✅ Login limiter (define FIRST)
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : [];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false,
+  optionsSuccessStatus: 204,
+  maxAge: 600
+}));
+
+// Define How Data Are Sent
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+// Login limiter (define FIRST)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts
@@ -38,27 +63,15 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 
-  // 🔥 Better: limit by email + IP (not just IP)
+  //  Better: limit by email + IP (not just IP)
   keyGenerator: (req) => {
     return (req.body.email || "unknown") + "-" + req.ip;
   },
 });
-
-//Cross Origin Configure
-app.use(cors({
-  origin:process.env.ALLOWED_ORIGINS,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: false
-}));
-// Define How Data Are Sent
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-// Store Uploads
-const { upload } = require('./cloudinary');
-
 app.use('/api/login', loginLimiter);
 app.use('/api/buyer_login', loginLimiter);
+// Store Uploads
+const { upload } = require('./cloudinary');
 
 const auth = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -102,7 +115,9 @@ app.post("/api/register", upload.fields([
         if (!req.files || !req.files.profile) {
             return res.status(400).json({ success: false, message: "Profile image required" });
         }
-
+        if(!req.files || !req.files.files){
+          return res.status(400).json({success:false,message:"Location Images Required"})
+        }
         // 2. Prepare Data
         const hash = await bcrypt.hash(password, 12);
         const profile = req.files.profile[0].path;
@@ -129,7 +144,7 @@ app.post("/api/register", upload.fields([
                 </div>
             `
         });
-
+        console.log(" API Email sent:", data.id);
         if (error) {
             console.error("❌ Resend Error:", error);
             return res.status(500).json({ success: false, message: "Email service failed" });
@@ -180,7 +195,7 @@ app.post("/api/login", async (req, res) => {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    // 🔥 CREATE TOKEN
+    //  CREATE TOKEN
     const token = jwt.sign(
       { id: user._id, role: "seller" },
       process.env.JWT_SECRET,
@@ -231,7 +246,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
             return res.status(500).json({ success: false, message: "Email failed" });
         }
 
-        console.log("✅ API Email sent:", data.id);
+        console.log(" API Email sent:", data.id);
 
         // SAVE TO DATABASE
         await Buyer.create({
@@ -258,33 +273,61 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
 app.post("/api/resend-verification", async (req, res) => {
     try {
         const { email } = req.body;
-        const buyer = await Buyer.findOne({ email });
 
-        if (!buyer) {
+        // 1. Search in both collections
+        let user = await Seller.findOne({ email });
+        let userType = "Seller";
+
+        if (!user) {
+            user = await Buyer.findOne({ email });
+            userType = "Buyer";
+        }
+
+        // 2. If neither has the email, return error
+        if (!user) {
             return res.json({ success: false, message: "User not found" });
         }
 
-        // 1. Generate a NEW 6-digit code
+        // 3. Check if they are already verified (No need to send a code if they are)
+        if (user.isVerified) {
+            return res.json({ success: false, message: "Account already verified. Please login." });
+        }
+
+        // 4. Generate a NEW 6-digit code
         const newCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // 2. Update the user in the Database with the new code and a fresh expiry
-        buyer.verificationCode = newCode;
-        buyer.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 more minutes
-        await buyer.save();
+        // 5. Update the found user (Mongoose identifies if it's Buyer or Seller automatically here)
+        user.verificationCode = newCode;
+        user.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+        await user.save();
 
-        // 3. Send the new email via Resend API
-        await resend.emails.send({
+        // 6. Send the new email via Resend API
+        const { data, error } = await resend.emails.send({
             from: 'Isonga Market <onboarding@resend.dev>',
             to: email,
-            subject: 'New Verification Code - Isonga Market',
-            html: `<strong>Your new code is: ${newCode}</strong><p>This code replaces your previous one.</p>`
+            subject: `New Verification Code for ${userType} Account`,
+            html: `
+                <div style="font-family: sans-serif; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px;">
+                    <h2 style="color: #2563eb;">Isonga Market</h2>
+                    <p>Hello ${user.name},</p>
+                    <p>You requested a new verification code for your <strong>${userType}</strong> account.</p>
+                    <div style="font-size: 24px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 10px 20px; margin: 10px 0;">
+                        ${newCode}
+                    </div>
+                    <p style="color: #64748b; font-size: 14px;">This code will expire in 10 minutes and replaces any previous codes.</p>
+                </div>
+            `
         });
 
-        res.json({ success: true, message: "New code sent!" });
+        if (error) {
+            return res.status(400).json({ success: false, message: "Email delivery failed" });
+        }
+
+        res.json({ success: true, message: `New code sent to your ${userType} email!` });
 
     } catch (error) {
         console.error("Resend Error:", error);
-        res.status(500).json({ success: false, message: "Failed to resend code" });
+        res.status(500).json({ success: false, message: "Internal Server Error" });
     }
 });
 
@@ -463,7 +506,9 @@ try{
 const {type,name,price,location,category,description,quantity}=req.body;
 
 let files=[];
-
+if(req.files.length>10){
+  return res.json({success:false,message:"Max Upload Must Be 10"});
+}
 if(req.files && req.files.length>0){
 files=req.files.map(file=>file.path);
 }

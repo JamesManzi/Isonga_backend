@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "are": "^0.0.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
     "connect-mongo": "^6.0.0",
@@ -20,11 +21,13 @@
     "express-rate-limit": "^8.3.2",
     "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.3",
+    "limit": "^0.0.1",
     "mongodb": "^7.1.0",
     "mongoose": "^9.3.0",
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^8.0.4",
+    "rate": "^0.1.1",
     "resend": "^6.9.4",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3"
