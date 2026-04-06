@@ -1366,6 +1366,27 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
   });
 
 });
+
+// Add this to your backend routes (e.g., in routes/chat.js or server.js)
+app.delete("/api/conversations/:room", async (req, res) => {
+  try {
+    const { room } = req.params;
+    const userId = req.user._id; // Ensure your auth middleware provides req.user
+
+    // We don't delete the messages, we just mark this room as "hidden" for this user
+    // You'll need to update your GET /api/buyer/conversations to filter these out
+    await Conversation.findOneAndUpdate(
+      { room },
+      { $addToSet: { deletedBy: userId } },
+      { upsert: true }
+    );
+
+    res.status(200).json({ success: true, message: "Conversation hidden" });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
 // Add this to your server.js
 app.get("/api/get_buyer/:id",auth, async (req, res) => {
   try {
