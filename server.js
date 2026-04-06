@@ -187,9 +187,6 @@ app.post("/api/login", async (req, res) => {
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
- if (!user.isVerified) {
-    return res.json({ success: false, message: "Please verify your email first" });
-}
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.json({ success: false, message: "Invalid Credentials" });
@@ -209,7 +206,8 @@ res.json({
   seller: {
     id: user._id,
     name: user.name,
-    email: user.email
+    email: user.email,
+    isVerified: user.isVerified
   }
 });
 
@@ -217,6 +215,7 @@ res.json({
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
+
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     try {
         const { name, email, password, repeat_pass } = req.body;
