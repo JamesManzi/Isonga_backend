@@ -417,13 +417,6 @@ app.post("/api/buyer_login", async (req, res) => {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    if (!user.isVerified) {
-  return res.json({
-    success: false,
-    message: "Please verify your email first"
-  });
-}
-
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.json({ success: false, message: "Invalid Credentials" });
@@ -440,7 +433,8 @@ app.post("/api/buyer_login", async (req, res) => {
       buyer: {
         id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        isVerified: user.isVerified
       }
     });
 
