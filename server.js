@@ -268,6 +268,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
         return res.status(500).json({ success: false, message: "Server Error" });
     }
 });
+
 app.post("/api/resend-verification", async (req, res) => {
   try {
     const { email, userType } = req.body;
@@ -358,6 +359,7 @@ app.post("/api/resend-verification", async (req, res) => {
     });
   }
 });
+
 app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -1149,31 +1151,45 @@ socket.on("joinRoom", ({ senderId, senderModel, receiverId, receiverModel }) => 
 });
 
 // =========================
-// SEND MESSAGE
-// =========================
 socket.on("sendMessage", async (data) => {
   try {
-    const { sender, senderModel, receiver, receiverModel, message,files } = data;
-    if (!sender || !receiver || (!message && (!files || files.length===0))) return;
+    // 1. Extract the new fields (productId and replyTo) from data
+    const { 
+      sender, senderModel, receiver, receiverModel, 
+      message, files, productId, replyTo 
+    } = data;
+
+    if (!sender || !receiver || (!message && (!files || files.length === 0))) return;
 
     const room =
       senderModel === "Buyer"
         ? `Buyer_${sender}__Seller_${receiver}`
         : `Buyer_${receiver}__Seller_${sender}`;
 
-    // Save message
+    // 2. Save message with the new fields
     const newMessage = await Message.create({
       sender,
       senderModel,
       receiver,
       receiverModel,
-      message:message||"",
-      files:files||[],
+      message: message || "",
+      files: files || [],
       room,
+      productId: productId || null, // Saves the product being discussed
+      replyTo: replyTo || null,     // Saves the ID of the message being replied to
       read: false
     });
 
-    // Count unread messages
+    // 3. IMPORTANT: Populate the replyTo and productId fields 
+    // This ensures the receiver gets the actual TEXT of the reply, not just an ID.
+    const populatedMessage = await Message.findById(newMessage._id)
+      .populate({
+        path: "replyTo",
+        select: "message files sender senderModel" // Only get what's needed for the quote box
+      })
+      .populate("productId", "name price files"); // Get product details for the tag
+
+    // 4. Count unread messages
     const unreadCount = await Message.countDocuments({
       room,
       receiver,
@@ -1182,14 +1198,14 @@ socket.on("sendMessage", async (data) => {
     });
 
     const messageData = {
-      ...newMessage.toObject(),
+      ...populatedMessage.toObject(),
       unreadCount
     };
 
-    // Emit message to everyone in room
+    // 5. Emit the FULL populated message to the room
     io.to(room).emit("receiveMessage", messageData);
 
-    // Emit notification to receiver if online
+    // 6. Emit notification to receiver
     const receiverKey = `${receiverModel}_${receiver}`;
     const receiverSocket = onlineUsers.get(receiverKey);
     if (receiverSocket) {
@@ -1201,6 +1217,7 @@ socket.on("sendMessage", async (data) => {
         receiverModel,
         message,
         unreadCount,
+        replyTo: messageData.replyTo, // Include reply data in notification
         createdAt: newMessage.createdAt
       });
     }
@@ -1366,16 +1383,26 @@ app.get("/api/seller/conversations",auth, async (req, res) => {
   }
 });
 
-
-// 1. GET messages for a specific room
+// 1. GET messages for a specific room (Updated with Population)
 app.get("/api/messages/:room", async (req, res) => {
   try {
-    const messages = await Message.find({ room: req.params.room }).sort({ createdAt: 1 });
+    const messages = await Message.find({ room: req.params.room })
+      // This "joins" the referenced message so you get the actual text
+      .populate({
+        path: "replyTo",
+        select: "message files sender senderModel" // Only fetch fields needed for the quote box
+      })
+      // This "joins" the product data if the message is a product inquiry
+      .populate("productId", "name price files")
+      .sort({ createdAt: 1 });
+
     res.json({ success: true, messages });
   } catch (err) {
-    res.status(500).json({ success: false });
+    console.error("Fetch Messages Error:", err);
+    res.status(500).json({ success: false, message: "Could not load messages" });
   }
 });
+
 app.put("/api/messages/read/:room",auth, async (req, res) => {
   try {
     const userId = req.userId;
