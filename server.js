@@ -1433,6 +1433,29 @@ app.put("/api/messages/read/:room",auth, async (req, res) => {
   }
 });
 
+// --- DELETE MESSAGE ROUTE ---
+app.delete("/api/messages/delete/:id", auth, async (req, res) => {
+  try {
+    const messageId = req.params.id;
+    const message = await Message.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    // Security check: Only the sender can delete their message
+    if (message.sender.toString() !== req.userId) {
+      return res.status(403).json({ success: false, message: "Unauthorized to delete this message" });
+    }
+
+    await Message.findByIdAndDelete(messageId);
+
+    res.json({ success: true, message: "Message deleted for everyone" });
+  } catch (error) {
+    console.error("Delete Msg Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
 // In server.js
 app.get("/api/get_seller/:id",auth, async (req, res) => {
   const seller = await Seller.findById(req.params.id).select("name profile");
