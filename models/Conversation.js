@@ -2,7 +2,11 @@ const mongoose = require("mongoose");
 
 const conversationSchema = new mongoose.Schema(
   {
-    room: { type: String, required: true, unique: true },
+    room: {
+      type: String,
+      required: true,
+      unique: true,
+    },
 
     buyerId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -16,19 +20,25 @@ const conversationSchema = new mongoose.Schema(
       required: true,
     },
 
-    lastMessage: { type: String, default: "" },
-    updatedAt: { type: Date, default: Date.now },
+    lastMessage: {
+      type: String,
+      default: "",
+    },
 
     unreadCount: {
       type: Number,
       default: 0,
     },
-deletedFor: [
-  {
-    type: mongoose.Schema.Types.ObjectId,
+
+    deletedFor: {
+      type: [mongoose.Schema.Types.ObjectId],
+      default: []   // 🔥 CRITICAL FIX
+    }
+
   },
-],
-},{ timestamps: true }
+  {
+    timestamps: true
+  }
 );
 
 module.exports = mongoose.model("Conversation", conversationSchema);

@@ -1371,7 +1371,7 @@ socket.on("deleteConversation", async ({ room }) => {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    const updated = await Conversation.findOneAndUpdate(
+    const result = await Conversation.findOneAndUpdate(
       { room },
       {
         $addToSet: { deletedFor: userObjectId }
@@ -1382,14 +1382,9 @@ socket.on("deleteConversation", async ({ room }) => {
       }
     );
 
-    // IMPORTANT: notify ALL connected clients in that room
-    io.to(room).emit("conversationDeleted", {
-      room,
-      userId
-    });
+    console.log("DELETE UPDATED DOC:", result); // 🔥 DEBUG
 
-    // optional: confirm back to sender
-    socket.emit("deleteConversationSuccess", { room });
+    io.to(room).emit("conversationDeleted", { room });
 
   } catch (err) {
     console.error("Socket Delete Error:", err);
@@ -1596,7 +1591,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     const buyerObjectId = new mongoose.Types.ObjectId(req.userId);
 
     const conversations = await Message.aggregate([
-      // 1. Get only messages related to this buyer
+      // 1. Get only messages related to buyer
       {
         $match: {
           $or: [
@@ -1606,10 +1601,9 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
 
-      // 2. Sort newest first
       { $sort: { createdAt: -1 } },
 
-      // 3. Group by room
+      // 2. Group messages into conversations
       {
         $group: {
           _id: "$room",
@@ -1643,40 +1637,40 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
 
-      // 4. Join conversation collection (soft delete tracking)
+      // 3. Join conversation table
       {
         $lookup: {
           from: "conversations",
           localField: "_id",
           foreignField: "room",
-          as: "statusInfo"
+          as: "conv"
         }
       },
 
-      // 5. Normalize missing conversation docs
+      // 4. flatten safely
       {
         $addFields: {
-          statusInfo: {
-            $arrayElemAt: ["$statusInfo", 0]
+          conv: { $arrayElemAt: ["$conv", 0] }
+        }
+      },
+
+      // 5. 🔥 STRONG DELETE FILTER (FIX)
+      {
+        $match: {
+          $expr: {
+            $not: {
+              $in: [
+                buyerObjectId,
+                {
+                  $ifNull: ["$conv.deletedFor", []]
+                }
+              ]
+            }
           }
         }
       },
 
-      // 6. 🚀 FIX: properly filter deleted conversations
-      {
-        $match: {
-          $or: [
-            { statusInfo: { $eq: null } },
-            {
-              "statusInfo.deletedFor": {
-                $not: { $in: [buyerObjectId] }
-              }
-            }
-          ]
-        }
-      },
-
-      // 7. Get seller details
+      // 6. seller lookup
       {
         $lookup: {
           from: "sellers",
@@ -1688,7 +1682,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
 
       { $unwind: "$seller" },
 
-      // 8. Final response shape
+      // 7. final shape
       {
         $project: {
           _id: 0,
@@ -1702,17 +1696,16 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
 
-      // 9. Final sort
       { $sort: { updatedAt: -1 } }
     ]);
 
     res.json({ success: true, conversations });
+
   } catch (err) {
     console.error("Conversation fetch error:", err);
     res.status(500).json({ success: false });
   }
 });
-
 app.get("/api/sellers/search", async (req, res) => {
   try {
     const query = req.query.q;
