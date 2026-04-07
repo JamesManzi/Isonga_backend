@@ -1581,55 +1581,101 @@ app.get("/api/get_seller/:id",auth, async (req, res) => {
 
 app.get("/api/buyer/conversations", auth, async (req, res) => {
   try {
-    const buyerId = req.userId;
-    if (!buyerId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
+    const buyerObjectId = new mongoose.Types.ObjectId(req.userId);
 
-    const buyerObjectId = new mongoose.Types.ObjectId(buyerId);
-
-    const conversations = await Conversation.aggregate([
-      // 1. Find conversations where the user is the buyer
-      // AND where the user HAS NOT deleted the conversation
+    const conversations = await Message.aggregate([
+      // 1. Get messages for this buyer
+      { $match: { 
+          $or: [
+            { sender: buyerObjectId, senderModel: "Buyer" },
+            { receiver: buyerObjectId, receiverModel: "Buyer" }
+          ]
+        } 
+      },
+      // 2. Sort by newest so $group grabs the latest one
+      { $sort: { createdAt: -1 } },
+      // 3. Build the room ID (Ensure this matches your Socket room logic exactly)
       {
-        $match: {
-          buyerId: buyerObjectId,
-          deletedFor: { $ne: buyerObjectId } 
+        $addFields: {
+          room: {
+            $concat: [
+              "Buyer_", { $toString: buyerObjectId },
+              "__Seller_", 
+              { $cond: [
+                { $eq: ["$senderModel", "Seller"] }, 
+                { $toString: "$sender" }, 
+                { $toString: "$receiver" }
+              ]}
+            ]
+          },
+          sellerId: {
+            $cond: [{ $eq: ["$senderModel", "Seller"] }, "$sender", "$receiver"]
+          }
         }
       },
-
-      // 2. Lookup Seller details
+      // 4. JOIN with Conversation to check if user deleted it
       {
         $lookup: {
-          from: "sellers", 
-          localField: "sellerId",
-          foreignField: "_id",
-          as: "sellerInfo"
+          from: "conversations",
+          localField: "room",
+          foreignField: "room",
+          as: "convStatus"
         }
       },
-      { $unwind: "$sellerInfo" },
-
-      // 3. Final Format (Mapping to your frontend needs)
+      { $unwind: { path: "$convStatus", preserveNullAndEmptyArrays: true } },
+      // 5. FILTER: Hide if buyerObjectId is in deletedFor
+      {
+        $match: {
+          $expr: {
+            $not: { $in: [buyerObjectId, { $ifNull: ["$convStatus.deletedFor", []] }] }
+          }
+        }
+      },
+      // 6. Group by room
+      {
+        $group: {
+          _id: "$room",
+          lastMessage: { $first: "$message" },
+          updatedAt: { $first: "$createdAt" },
+          sellerId: { $first: "$sellerId" },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$receiver", buyerObjectId] }, { $eq: ["$read", false] }] },
+                1, 0
+              ]
+            }
+          }
+        }
+      },
+      // 7. Get Seller Info
+      {
+        $lookup: {
+          from: "sellers",
+          localField: "sellerId",
+          foreignField: "_id",
+          as: "seller"
+        }
+      },
+      { $unwind: "$seller" },
       {
         $project: {
           _id: 0,
-          room: 1,
+          room: "$_id",
           lastMessage: 1,
           updatedAt: 1,
           unreadCount: 1,
           sellerId: 1,
-          sellerName: "$sellerInfo.name",
-          sellerProfile: "$sellerInfo.profile",
+          sellerName: "$seller.name",
+          sellerProfile: "$seller.profile",
         }
       },
-
-      // 4. Sort by latest activity
       { $sort: { updatedAt: -1 } }
     ]);
 
     res.json({ success: true, conversations });
   } catch (err) {
-    console.error("Fetch Conversations Error:", err);
+    console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
