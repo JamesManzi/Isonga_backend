@@ -2330,24 +2330,22 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
 
         const newBooking = await Booking.create(bookingData);
 
-        //  SEND REAL-TIME NOTIFICATION TO SELLER
-        const sellerKey = `Seller_${productData.seller}`;
-        const sellerSocketId = onlineUsers.get(sellerKey);
+// ✅ USE ROOMS FOR RELIABLE NOTIFICATIONS
+const sellerRoom = `Seller_${productData.seller}`;
 
-        if (sellerSocketId) {
-          io.to(sellerSocketId).emit("newBookingNotification", {
-            message: `New Booking from ${name}!`,
-            bookingId: newBooking._id,
-            date,
-            time
-          });
-        }
+// This sends to ALL devices/tabs the seller has open
+io.to(sellerRoom).emit("newBookingNotification", {
+  message: `New Booking Request from ${name}!`,
+  bookingId: newBooking._id,
+  date,
+  time
+});
 
-        res.json({
-          success: true,
-          message: "Booking Sent Successfully!",
-          booking: newBooking
-        });
+res.json({
+  success: true,
+  message: "Booking Sent Successfully!",
+  booking: newBooking
+});
 
       } catch (error) {
         console.error("Booking Route Error:", error);
@@ -2415,27 +2413,28 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
         });
 
         // ✅ SOCKET REAL-TIME
-        const buyerKey = `Buyer_${updatedBooking.buyer}`;
-        const buyerSocket = onlineUsers.get(buyerKey);
+       // ... inside app.put("/api/bookings/:id") after creating the Notification ...
 
-        if (buyerSocket) {
-          const unreadCount = await Notification.countDocuments({
-            recipient: updatedBooking.buyer,
-            read: false
-          });
+// ✅ USE ROOMS FOR BUYER NOTIFICATIONS
+const buyerRoom = `Buyer_${updatedBooking.buyer}`;
 
-          io.to(buyerSocket).emit("new_notification", {
-            _id: newNotif._id,
-            message: notificationMessage,
-            unreadCount,
-            orderId: updatedBooking._id,
-            status,
-            type: "Booking",
-            createdAt: newNotif.createdAt
-          });
-        }
+const unreadCount = await Notification.countDocuments({
+  recipient: updatedBooking.buyer,
+  read: false
+});
 
-        res.json({ success: true, booking: updatedBooking });
+// Notify the buyer room
+io.to(buyerRoom).emit("new_notification", {
+  _id: newNotif._id,
+  message: notificationMessage,
+  unreadCount,
+  orderId: updatedBooking._id,
+  status,
+  type: "Booking",
+  createdAt: newNotif.createdAt
+});
+
+res.json({ success: true, booking: updatedBooking });
 
       } catch (error) {
         console.error("🔥 Booking Update Error:", error);
