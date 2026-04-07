@@ -1582,12 +1582,10 @@ app.get("/api/get_seller/:id",auth, async (req, res) => {
 app.get("/api/buyer/conversations", auth, async (req, res) => {
   try {
     const buyerId = req.userId;
-    if (!buyerId) return res.status(401).json({ success: false });
-
     const buyerObjectId = new mongoose.Types.ObjectId(buyerId);
 
     const conversations = await Message.aggregate([
-      // 1. Get messages involving this buyer
+      // 1. Find all messages where the user is either sender or receiver
       { 
         $match: { 
           $or: [
@@ -1596,9 +1594,9 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           ]
         } 
       },
-      // 2. Sort to get newest first
+      // 2. Sort by newest so the group stage picks the latest message
       { $sort: { createdAt: -1 } },
-      // 3. Group by the room ID that is ALREADY in the message
+      // 3. Group by the 'room' field EXACTLY as it is stored in the Message collection
       {
         $group: {
           _id: "$room", 
@@ -1619,18 +1617,18 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 4. JOIN with Conversations to check the "deletedFor" array
+      // 4. Join with the Conversations collection to check for the 'deletedFor' flag
       {
         $lookup: {
           from: "conversations",
-          localField: "_id", // This is the room from the messages
+          localField: "_id", // This is the room ID from messages
           foreignField: "room",
           as: "status"
         }
       },
       { $unwind: { path: "$status", preserveNullAndEmptyArrays: true } },
 
-      // 5. 🔥 THE REFRESH FIX: Filter out the chat if your ID is in deletedFor
+      // 5. 🔥 THE REFRESH FIX: Only keep chats where buyerId is NOT in deletedFor
       {
         $match: {
           $expr: {
@@ -1640,7 +1638,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 6. Get Seller Details
+      // 6. Get Seller Profile Details
       {
         $lookup: {
           from: "sellers",
@@ -1668,7 +1666,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
 
     res.json({ success: true, conversations });
   } catch (err) {
-    console.error("Aggregation Error:", err);
+    console.error("Fetch Error:", err);
     res.status(500).json({ success: false });
   }
 });
