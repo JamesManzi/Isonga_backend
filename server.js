@@ -1367,27 +1367,22 @@ const mongoose = require("mongoose");
 socket.on("deleteConversation", async ({ room }) => {
   try {
     const userId = socket.userId;
-    if (!userId || !room) return;
+
+    console.log("DELETE REQUEST:", { userId, room });
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const result = await Conversation.findOneAndUpdate(
       { room },
-      {
-        $addToSet: { deletedFor: userObjectId }
-      },
-      {
-        upsert: true,
-        new: true
-      }
+      { $addToSet: { deletedFor: userObjectId } },
+      { upsert: true, new: true }
     );
 
-    console.log("DELETE UPDATED DOC:", result); // 🔥 DEBUG
+    console.log("UPDATED CONVERSATION:", result);
 
     io.to(room).emit("conversationDeleted", { room });
-
   } catch (err) {
-    console.error("Socket Delete Error:", err);
+    console.error(err);
   }
 });
   // =========================
