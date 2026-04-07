@@ -1753,6 +1753,39 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
+
+// GET all sellers for public home
+app.get("/api/home_sellers", async (req, res) => {
+  try {
+    const sellers = await Seller.find().select(
+      "name location category profile files description"
+    );
+
+    // Add ratings info for each seller
+    const sellersWithRatings = await Promise.all(
+      sellers.map(async (seller) => {
+        const ratings = await Rating.find({ seller: seller._id });
+        const averageRating = ratings.length
+          ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+          : 0;
+        const numReviews = ratings.length;
+
+        return {
+          ...seller.toObject(),
+          averageRating,
+          numReviews,
+        };
+      })
+    );
+
+    res.json({ success: true, sellers: sellersWithRatings });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Error fetching sellers" });
+  }
+});
+
 app.get("/api/sellers/search", async (req, res) => {
   try {
     const query = req.query.q;
