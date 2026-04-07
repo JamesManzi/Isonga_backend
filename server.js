@@ -1598,13 +1598,12 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
       },
       // 2. Sort to get newest first
       { $sort: { createdAt: -1 } },
-      // 3. Group by the EXISTING room field in the Message document
+      // 3. Group by the room ID that is ALREADY in the message
       {
         $group: {
           _id: "$room", 
           lastMessage: { $first: "$message" },
           updatedAt: { $first: "$createdAt" },
-          // Identify the other person (the seller)
           sellerId: {
             $first: {
               $cond: [{ $eq: ["$senderModel", "Seller"] }, "$sender", "$receiver"]
@@ -1620,18 +1619,18 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 4. JOIN with the Conversations collection using the exact Room ID
+      // 4. JOIN with Conversations to check the "deletedFor" array
       {
         $lookup: {
           from: "conversations",
-          localField: "_id", // This is the room from the Message group
+          localField: "_id", // This is the room from the messages
           foreignField: "room",
           as: "status"
         }
       },
       { $unwind: { path: "$status", preserveNullAndEmptyArrays: true } },
 
-      // 5. 🔥 THE FIX: Filter out if the buyer's ID is in deletedFor
+      // 5. 🔥 THE REFRESH FIX: Filter out the chat if your ID is in deletedFor
       {
         $match: {
           $expr: {
@@ -1651,7 +1650,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
       { $unwind: "$sellerInfo" },
-      // 7. Format Output
+      // 7. Final Project
       {
         $project: {
           _id: 0,
