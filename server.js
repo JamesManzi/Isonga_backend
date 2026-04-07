@@ -1588,64 +1588,28 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
 
     const conversations = await Message.aggregate([
       // 1. Get messages involving this buyer
-      { $match: { 
+      { 
+        $match: { 
           $or: [
             { sender: buyerObjectId, senderModel: "Buyer" },
             { receiver: buyerObjectId, receiverModel: "Buyer" }
           ]
         } 
       },
-      // 2. Sort by newest
+      // 2. Sort to get newest first
       { $sort: { createdAt: -1 } },
-      // 3. Construct Room ID (Ensure this matches your Socket logic exactly!)
-      {
-        $addFields: {
-          room: {
-            $concat: [
-              "Buyer_", { $toString: buyerObjectId },
-              "__Seller_", 
-              { $cond: [
-                { $eq: ["$senderModel", "Seller"] }, 
-                { $toString: "$sender" }, 
-                { $toString: "$receiver" }
-              ]}
-            ]
-          },
-          sellerId: {
-            $cond: [{ $eq: ["$senderModel", "Seller"] }, "$sender", "$receiver"]
-          }
-        }
-      },
-      // 4. Join with Conversation collection
-      {
-        $lookup: {
-          from: "conversations",
-          localField: "room",
-          foreignField: "room",
-          as: "convStatus"
-        }
-      },
-      { $unwind: { path: "$convStatus", preserveNullAndEmptyArrays: true } },
-      
-      // 5. 🔥 THE REFRESH FIX: 
-      // This filters out chats where the buyer's ID exists in 'deletedFor'
-      {
-        $match: {
-          $expr: {
-            $not: { 
-              $in: [buyerObjectId, { $ifNull: ["$convStatus.deletedFor", []] }] 
-            }
-          }
-        }
-      },
-
-      // 6. Group results by room
+      // 3. Group by the EXISTING room field in the Message document
       {
         $group: {
-          _id: "$room",
+          _id: "$room", 
           lastMessage: { $first: "$message" },
           updatedAt: { $first: "$createdAt" },
-          sellerId: { $first: "$sellerId" },
+          // Identify the other person (the seller)
+          sellerId: {
+            $first: {
+              $cond: [{ $eq: ["$senderModel", "Seller"] }, "$sender", "$receiver"]
+            }
+          },
           unreadCount: {
             $sum: {
               $cond: [
@@ -1656,17 +1620,38 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 7. Lookup Seller Profile
+      // 4. JOIN with the Conversations collection using the exact Room ID
+      {
+        $lookup: {
+          from: "conversations",
+          localField: "_id", // This is the room from the Message group
+          foreignField: "room",
+          as: "status"
+        }
+      },
+      { $unwind: { path: "$status", preserveNullAndEmptyArrays: true } },
+
+      // 5. 🔥 THE FIX: Filter out if the buyer's ID is in deletedFor
+      {
+        $match: {
+          $expr: {
+            $not: { 
+              $in: [buyerObjectId, { $ifNull: ["$status.deletedFor", []] }] 
+            }
+          }
+        }
+      },
+      // 6. Get Seller Details
       {
         $lookup: {
           from: "sellers",
           localField: "sellerId",
           foreignField: "_id",
-          as: "seller"
+          as: "sellerInfo"
         }
       },
-      { $unwind: "$seller" },
-      // 8. Final Output
+      { $unwind: "$sellerInfo" },
+      // 7. Format Output
       {
         $project: {
           _id: 0,
@@ -1675,8 +1660,8 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           updatedAt: 1,
           unreadCount: 1,
           sellerId: 1,
-          sellerName: "$seller.name",
-          sellerProfile: "$seller.profile",
+          sellerName: "$sellerInfo.name",
+          sellerProfile: "$sellerInfo.profile",
         }
       },
       { $sort: { updatedAt: -1 } }
