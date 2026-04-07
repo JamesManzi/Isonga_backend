@@ -1361,6 +1361,8 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
   }
 });
 
+const mongoose = require("mongoose");
+
 socket.on("deleteConversation", async ({ room }) => {
   try {
     const userId = socket.userId;
@@ -1368,20 +1370,17 @@ socket.on("deleteConversation", async ({ room }) => {
 
     const Conversation = require("./models/Conversation");
 
-    // mark deleted for THIS user only
     await Conversation.findOneAndUpdate(
       { room },
       {
         $addToSet: {
-          deletedFor: userId,
+          deletedFor: new mongoose.Types.ObjectId(userId), // ✅ IMPORTANT
         },
-      }
+      },
+      { upsert: true }
     );
 
-    // notify this user only
-    io.to(socket.userKey).emit("conversationDeleted", {
-      room,
-    });
+    io.to(socket.userKey).emit("conversationDeleted", { room });
 
   } catch (err) {
     console.error("deleteConversation error:", err);
