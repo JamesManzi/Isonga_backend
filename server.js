@@ -1,28 +1,28 @@
-  const dns = require('node:dns');
+const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
-const express=require("express");
-const mongoose=require("mongoose");
-const bcrypt=require("bcryptjs");
-const cors=require("cors");
-const multer=require("multer");
+const express = require("express");
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+const cors = require("cors");
+const multer = require("multer");
 require("dotenv").config();
-const Seller=require("./models/seller");
-const Buyer=require("./models/buyer");
-const Product=require("./models/product");
-const Rating=require("./models/Rating");
+const Seller = require("./models/seller");
+const Buyer = require("./models/buyer");
+const Product = require("./models/product");
+const Rating = require("./models/Rating");
 const Message = require("./models/Message");
 const Cart = require("./models/Cart");
 const Order = require("./models/Order");
 const path = require("path");
-const Booking=require("./models/booking");
+const Booking = require("./models/booking");
 const jwt = require("jsonwebtoken");
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 const Notification = require("./models/Notification");
 const rateLimit = require("express-rate-limit");
-const Conversation=require("./models/Conversation");
+const Conversation = require("./models/Conversation");
 // Creating App
-const app=express();
+const app = express();
 
 app.set("trust proxy", 1);
 
@@ -95,46 +95,46 @@ const auth = (req, res, next) => {
 };
 // Database Connection
 mongoose.connect(process.env.MONGO_URL)
-.then(async () => {
-  console.log(" Database Connected");
-  const collections = await mongoose.connection.db.listCollections().toArray();
-  console.log("Collections in DB:", collections.map(c => c.name));
-})
-.catch((error) => console.log(" DB connection error:", error));
+  .then(async () => {
+    console.log(" Database Connected");
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    console.log("Collections in DB:", collections.map(c => c.name));
+  })
+  .catch((error) => console.log(" DB connection error:", error));
 // Seller Register with Email Verification
 app.post("/api/register", upload.fields([
-    { name: "profile", maxCount: 1 },
-    { name: "files", maxCount: 5 }
+  { name: "profile", maxCount: 1 },
+  { name: "files", maxCount: 5 }
 ]), async (req, res) => {
-    try {
-        const { name, location, phone, email, password, description, category, sellerType } = req.body;
+  try {
+    const { name, location, phone, email, password, description, category, sellerType } = req.body;
 
-        // 1. Basic Checks
-        const existingSeller = await Seller.findOne({ email });
-        if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
+    // 1. Basic Checks
+    const existingSeller = await Seller.findOne({ email });
+    if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
 
-        if (!req.files || !req.files.profile) {
-            return res.status(400).json({ success: false, message: "Profile image required" });
-        }
-        if(!req.files || !req.files.files){
-          return res.status(400).json({success:false,message:"Location Images Required"})
-        }
-        // 2. Prepare Data
-        const hash = await bcrypt.hash(password, 12);
-        const profile = req.files.profile[0].path;
-        const files = req.files.files ? req.files.files.map(f => f.path) : [];
-        
-        // 3. Generate 6-Digit Code
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
+    if (!req.files || !req.files.profile) {
+      return res.status(400).json({ success: false, message: "Profile image required" });
+    }
+    if (!req.files || !req.files.files) {
+      return res.status(400).json({ success: false, message: "Location Images Required" })
+    }
+    // 2. Prepare Data
+    const hash = await bcrypt.hash(password, 12);
+    const profile = req.files.profile[0].path;
+    const files = req.files.files ? req.files.files.map(f => f.path) : [];
 
-        console.log(`📧 Sending Seller Verification to: ${email}`);
+    // 3. Generate 6-Digit Code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // 4. Send Email via Resend
-        const { data, error } = await resend.emails.send({
-            from: 'Isonga Market <onboarding@resend.dev>',
-            to: email,
-            subject: 'Verify your Isonga Seller Account',
-            html: `
+    console.log(`📧 Sending Seller Verification to: ${email}`);
+
+    // 4. Send Email via Resend
+    const { data, error } = await resend.emails.send({
+      from: 'Isonga Market <onboarding@resend.dev>',
+      to: email,
+      subject: 'Verify your Isonga Seller Account',
+      html: `
                 <div style="font-family: sans-serif; padding: 20px;">
                     <h1 style="color: #2563eb;">Welcome to Isonga Market, ${name}!</h1>
                     <p>To start selling, please verify your email using this code:</p>
@@ -144,40 +144,40 @@ app.post("/api/register", upload.fields([
                     <p>This code expires in 10 minutes.</p>
                 </div>
             `
-        });
-        console.log(" API Email sent:", data.id);
-        if (error) {
-            console.error("❌ Resend Error:", error);
-            return res.status(500).json({ success: false, message: "Email service failed" });
-        }
-
-        // 5. Create Seller (Unverified)
-        await Seller.create({
-            name,
-            profile,
-            location,
-            phone,
-            email,
-            files,
-            password: hash,
-            description,
-            category,
-            sellerType,
-            isVerified: false, // Must verify first
-            verificationCode: code,
-            verificationExpires: Date.now() + 10 * 60 * 1000 
-        });
-
-        res.json({ 
-            success: true, 
-            message: "Verification code sent to your email",
-            email 
-        });
-
-    } catch (error) {
-        console.error("Seller Register error:", error);
-        return res.status(500).json({ success: false, message: "Server Error" });
+    });
+    console.log(" API Email sent:", data.id);
+    if (error) {
+      console.error("❌ Resend Error:", error);
+      return res.status(500).json({ success: false, message: "Email service failed" });
     }
+
+    // 5. Create Seller (Unverified)
+    await Seller.create({
+      name,
+      profile,
+      location,
+      phone,
+      email,
+      files,
+      password: hash,
+      description,
+      category,
+      sellerType,
+      isVerified: false, // Must verify first
+      verificationCode: code,
+      verificationExpires: Date.now() + 10 * 60 * 1000
+    });
+
+    res.json({
+      success: true,
+      message: "Verification code sent to your email",
+      email
+    });
+
+  } catch (error) {
+    console.error("Seller Register error:", error);
+    return res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
 
 app.post("/api/login", async (req, res) => {
@@ -201,16 +201,16 @@ app.post("/api/login", async (req, res) => {
     );
 
 
-res.json({
-  success: true,
-  token,
-  seller: {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    isVerified: user.isVerified
-  }
-});
+    res.json({
+      success: true,
+      token,
+      seller: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isVerified: user.isVerified
+      }
+    });
 
   } catch (error) {
     res.status(500).json({ success: false, message: "Login Error" });
@@ -218,56 +218,56 @@ res.json({
 });
 
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
-    try {
-        const { name, email, password, repeat_pass } = req.body;
-        
-        const ExistingBuyer = await Buyer.findOne({ email });
-        if (ExistingBuyer) {
-            return res.json({ success: false, message: "User Already Exist" });
-        }
+  try {
+    const { name, email, password, repeat_pass } = req.body;
 
-        // ... Keep your password regex and hashing logic here ...
-        const hashed = await bcrypt.hash(password, 12);
-        let profile = req.file ? req.file.path : "";
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-
-        console.log("📧 Sending via Resend API to:", email);
-
-        // SEND EMAIL USING API (NOT SMTP)
-        const { data, error } = await resend.emails.send({
-            from: 'Isonga Market <onboarding@resend.dev>', // Use this default sender for testing
-            to: email,
-            subject: 'Verify your Isonga Market Account',
-            html: `<strong>Welcome ${name}!</strong><p>Your verification code is: <b>${code}</b></p>`
-        });
-
-        if (error) {
-            console.error("❌ Resend Error:", error);
-            return res.status(500).json({ success: false, message: "Email failed" });
-        }
-
-        console.log(" API Email sent:", data.id);
-
-        // SAVE TO DATABASE
-        await Buyer.create({
-            name,
-            email,
-            password: hashed,
-            profile,
-            verificationCode: code,
-            verificationExpires: Date.now() + 10 * 60 * 1000 
-        });
-
-        return res.json({
-            success: true,
-            message: "Verification code sent to email",
-            email
-        });
-
-    } catch (error) {
-        console.error("🔥 REGISTER ERROR:", error);
-        return res.status(500).json({ success: false, message: "Server Error" });
+    const ExistingBuyer = await Buyer.findOne({ email });
+    if (ExistingBuyer) {
+      return res.json({ success: false, message: "User Already Exist" });
     }
+
+    // ... Keep your password regex and hashing logic here ...
+    const hashed = await bcrypt.hash(password, 12);
+    let profile = req.file ? req.file.path : "";
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    console.log("📧 Sending via Resend API to:", email);
+
+    // SEND EMAIL USING API (NOT SMTP)
+    const { data, error } = await resend.emails.send({
+      from: 'Isonga Market <onboarding@resend.dev>', // Use this default sender for testing
+      to: email,
+      subject: 'Verify your Isonga Market Account',
+      html: `<strong>Welcome ${name}!</strong><p>Your verification code is: <b>${code}</b></p>`
+    });
+
+    if (error) {
+      console.error("❌ Resend Error:", error);
+      return res.status(500).json({ success: false, message: "Email failed" });
+    }
+
+    console.log(" API Email sent:", data.id);
+
+    // SAVE TO DATABASE
+    await Buyer.create({
+      name,
+      email,
+      password: hashed,
+      profile,
+      verificationCode: code,
+      verificationExpires: Date.now() + 10 * 60 * 1000
+    });
+
+    return res.json({
+      success: true,
+      message: "Verification code sent to email",
+      email
+    });
+
+  } catch (error) {
+    console.error("🔥 REGISTER ERROR:", error);
+    return res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
 
 app.post("/api/resend-verification", async (req, res) => {
@@ -381,12 +381,12 @@ app.post("/api/verify-email", async (req, res) => {
       // DEBUG: Let's see what's actually in the DB for this email
       const bTest = await Buyer.findOne({ email });
       const sTest = await Seller.findOne({ email });
-      
+
       console.log(`--- Verification Failed for ${email} ---`);
       console.log(`Input Code: ${inputCode}`);
       console.log(`Buyer Code in DB: ${bTest?.verificationCode || "None"}`);
       console.log(`Seller Code in DB: ${sTest?.verificationCode || "None"}`);
-      
+
       return res.json({ success: false, message: "Invalid code" });
     }
 
@@ -459,10 +459,10 @@ app.post("/api/forgot-password", async (req, res) => {
 
     // 2. Generate 6-digit reset code
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     // 3. Save to DB with short expiry (e.g., 5 minutes)
     user.verificationCode = resetCode;
-    user.verificationExpires = Date.now() + 5 * 60 * 1000; 
+    user.verificationExpires = Date.now() + 5 * 60 * 1000;
     await user.save();
 
     // 4. Send Email
@@ -486,8 +486,8 @@ app.post("/api/reset-password", async (req, res) => {
     const { email, code, newPassword } = req.body;
 
     // 1. Find the user with that specific code
-    let user = await Buyer.findOne({ email, verificationCode: code }) || 
-               await Seller.findOne({ email, verificationCode: code });
+    let user = await Buyer.findOne({ email, verificationCode: code }) ||
+      await Seller.findOne({ email, verificationCode: code });
 
     if (!user) {
       return res.json({ success: false, message: "Invalid or expired code" });
@@ -501,7 +501,7 @@ app.post("/api/reset-password", async (req, res) => {
     // 3. Hash new password and save
     const salt = await bcrypt.genSalt(12);
     user.password = await bcrypt.hash(newPassword, salt);
-    
+
     // 4. Clear reset fields so code can't be used again
     user.verificationCode = null;
     user.verificationExpires = null;
@@ -515,8 +515,8 @@ app.post("/api/reset-password", async (req, res) => {
 
 app.post("/api/verify-reset-code", async (req, res) => {
   const { email, code } = req.body;
-  const user = await Buyer.findOne({ email, verificationCode: code }) || 
-               await Seller.findOne({ email, verificationCode: code });
+  const user = await Buyer.findOne({ email, verificationCode: code }) ||
+    await Seller.findOne({ email, verificationCode: code });
 
   if (!user || user.verificationExpires < Date.now()) {
     return res.json({ success: false, message: "Invalid code" });
@@ -524,46 +524,46 @@ app.post("/api/verify-reset-code", async (req, res) => {
   res.json({ success: true }); // Move to step 3
 });
 
-app.post("/api/add_product",auth, upload.array("files",10),auth, async (req,res)=>{
-try{
+app.post("/api/add_product", auth, upload.array("files", 10), auth, async (req, res) => {
+  try {
 
-const {type,name,price,location,category,description,quantity}=req.body;
+    const { type, name, price, location, category, description, quantity } = req.body;
 
-let files=[];
-if(req.files.length>10){
-  return res.json({success:false,message:"Max Upload Must Be 10"});
-}
-if(req.files && req.files.length>0){
-files=req.files.map(file=>file.path);
-}
+    let files = [];
+    if (req.files.length > 10) {
+      return res.json({ success: false, message: "Max Upload Must Be 10" });
+    }
+    if (req.files && req.files.length > 0) {
+      files = req.files.map(file => file.path);
+    }
 
-await Product.create({
-seller:req.userId,
-type,
-name,
-price,
-location,
-category,
-description,
-quantity,
-files
+    await Product.create({
+      seller: req.userId,
+      type,
+      name,
+      price,
+      location,
+      category,
+      description,
+      quantity,
+      files
+    });
+
+    res.json({
+      success: true,
+      message: "Item Added Successfully"
+    });
+
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: "Add Item Error"
+    });
+  }
 });
 
-res.json({
-success:true,
-message:"Item Added Successfully"
-});
-
-}catch(error){
-console.log(error);
-res.status(500).json({
-success:false,
-message:"Add Item Error"
-});
-}
-});
-
-app.get("/api/dashboard",auth, async (req, res) => {
+app.get("/api/dashboard", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
     if (!sellerId) return res.json({ success: false, message: "Not Logged In" });
@@ -571,7 +571,7 @@ app.get("/api/dashboard",auth, async (req, res) => {
     const seller = await Seller.findById(sellerId);
     if (!seller) return res.json({ success: false, message: "Seller not found" });
 
-    const totalItemsCount = await Product.countDocuments({ 
+    const totalItemsCount = await Product.countDocuments({
       seller: sellerId,
       type: seller.sellerType // Matches "Product", "Service", or "Asset"
     });
@@ -579,8 +579,8 @@ app.get("/api/dashboard",auth, async (req, res) => {
     // 1. Calculate Ratings
     const ratings = await Rating.find({ seller: sellerId });
     const numReviews = ratings.length;
-    const averageRating = numReviews > 0 
-      ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews 
+    const averageRating = numReviews > 0
+      ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
       : 0;
 
     // 2. Fetch Data based on Seller Type
@@ -600,54 +600,54 @@ app.get("/api/dashboard",auth, async (req, res) => {
     // 4. Get Views
     const totalViews = seller.views || 0;
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-const todayEntry = seller.dailyViews.find(
-  d => new Date(d.date).getTime() === today.getTime()
-);
+    const todayEntry = seller.dailyViews.find(
+      d => new Date(d.date).getTime() === today.getTime()
+    );
 
-const todayViews = todayEntry ? todayEntry.buyers.length : 0;
+    const todayViews = todayEntry ? todayEntry.buyers.length : 0;
 
     // Current problematic part in your backend:
-res.json({
-  success: true,
-  seller: {
-    ...seller.toObject(),
-    totalOrders: totalActivityCount,
-    newOrders: newActivityCount,
-    // averageRating is being calculated, but let's make sure it's inside 'seller'
-    averageRating: Number(averageRating.toFixed(1)), 
-    numReviews: numReviews,
-    totalItemsCount: totalItemsCount
-  },
-  totalViews,
-  todayViews
-});
+    res.json({
+      success: true,
+      seller: {
+        ...seller.toObject(),
+        totalOrders: totalActivityCount,
+        newOrders: newActivityCount,
+        // averageRating is being calculated, but let's make sure it's inside 'seller'
+        averageRating: Number(averageRating.toFixed(1)),
+        numReviews: numReviews,
+        totalItemsCount: totalItemsCount
+      },
+      totalViews,
+      todayViews
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false,message:"Dashboard Internal Server Error" });
+    res.status(500).json({ success: false, message: "Dashboard Internal Server Error" });
   }
 });
 
-app.get("/api/my_store",auth,async(req,res)=>{
- try {
+app.get("/api/my_store", auth, async (req, res) => {
+  try {
 
-    const products=await Product.find({seller:req.userId});
-    const seller=await Seller.findById(req.userId).select("name");
+    const products = await Product.find({ seller: req.userId });
+    const seller = await Seller.findById(req.userId).select("name");
 
     res.json({
-        success:true,
-        products,
-        seller
+      success: true,
+      products,
+      seller
     })
- } catch (error) {
+  } catch (error) {
     console.log(error);
-    res.status(500).json({success:false,message:"My Store Server Error"});
- }
+    res.status(500).json({ success: false, message: "My Store Server Error" });
+  }
 })
 
-app.get("/api/seller_profile",auth, async (req, res) => {
+app.get("/api/seller_profile", auth, async (req, res) => {
   try {
 
     // Get seller
@@ -703,7 +703,7 @@ app.get("/api/buyer_dashboard", auth, async (req, res) => {
       sellers.map(async (seller) => {
         // Ensure 'Rating' model is imported at the top of your file!
         const ratings = await Rating.find({ seller: seller._id });
-        
+
         const numReviews = ratings.length;
         const averageRating = numReviews
           ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
@@ -731,15 +731,15 @@ app.get("/api/buyer_dashboard", auth, async (req, res) => {
 
   } catch (error) {
     console.error("Dashboard Route Error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server Error", 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message
     });
   }
 });
 
-app.get("/api/view_profile/:id",auth, async (req, res) => {
+app.get("/api/view_profile/:id", auth, async (req, res) => {
   try {
 
     const sellerId = req.params.id;
@@ -775,63 +775,63 @@ app.get("/api/view_profile/:id",auth, async (req, res) => {
   }
 });
 
-app.get("/api/view_products/:id",auth,async(req,res)=>{
-    try {
-        const sellerId=req.params.id;
-        const seller=await Seller.findById(sellerId);
-        if (!seller) {
+app.get("/api/view_products/:id", auth, async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    const seller = await Seller.findById(sellerId);
+    if (!seller) {
       return res.json({ success: false, message: "Seller not found" });
     }
-    const products=await Product.find({seller:sellerId});
-        res.json({
-            success:true,
-            seller,
-            products
-        })
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"View Products Server Error"});
-    }
+    const products = await Product.find({ seller: sellerId });
+    res.json({
+      success: true,
+      seller,
+      products
+    })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: "View Products Server Error" });
+  }
 })
 
-app.get("/api/Service_Products/:id",auth,async(req,res)=>{
+app.get("/api/Service_Products/:id", auth, async (req, res) => {
   try {
-        const sellerId=req.params.id;
-        const seller=await Seller.findById(sellerId);
-        if (!seller) {
+    const sellerId = req.params.id;
+    const seller = await Seller.findById(sellerId);
+    if (!seller) {
       return res.json({ success: false, message: "Seller not found" });
     }
-    const products=await Product.find({seller:sellerId});
-        res.json({
-            success:true,
-            seller,
-            products
-        })
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"View Products Server Error"});
-    }
+    const products = await Product.find({ seller: sellerId });
+    res.json({
+      success: true,
+      seller,
+      products
+    })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: "View Products Server Error" });
+  }
 })
 
-app.get("/api/Asset_Products/:id",auth,async(req,res)=>{
+app.get("/api/Asset_Products/:id", auth, async (req, res) => {
   try {
-        const sellerId=req.params.id;
-        const seller=await Seller.findById(sellerId);
-        if (!seller) {
+    const sellerId = req.params.id;
+    const seller = await Seller.findById(sellerId);
+    if (!seller) {
       return res.json({ success: false, message: "Seller not found" });
     }
-    const products=await Product.find({seller:sellerId});
-        res.json({
-            success:true,
-            seller,
-            products
-        })
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({success:false,message:"View Products Error"});
-    }
+    const products = await Product.find({ seller: sellerId });
+    res.json({
+      success: true,
+      seller,
+      products
+    })
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: "View Products Error" });
+  }
 })
-app.get("/api/sellers/:category",auth, async (req, res) => {
+app.get("/api/sellers/:category", auth, async (req, res) => {
   try {
     // Find sellers by category
     const sellers = await Seller.find({
@@ -872,7 +872,7 @@ app.get("/api/sellers/:category",auth, async (req, res) => {
   }
 });
 
-app.delete("/api/products/delete/:productId",auth, async (req, res) => {
+app.delete("/api/products/delete/:productId", auth, async (req, res) => {
   try {
 
     const productId = req.params.productId;
@@ -896,7 +896,7 @@ app.delete("/api/products/delete/:productId",auth, async (req, res) => {
   }
 });
 
-app.put("/api/products/update/:id",auth, upload.array("files", 10), async (req, res) => {
+app.put("/api/products/update/:id", auth, upload.array("files", 10), async (req, res) => {
   try {
 
     const productId = req.params.id;
@@ -944,18 +944,18 @@ app.put("/api/products/update/:id",auth, upload.array("files", 10), async (req, 
   }
 });
 
-app.get("/api/buyer_profile/update",auth,async(req,res)=>{
-    try {
+app.get("/api/buyer_profile/update", auth, async (req, res) => {
+  try {
 
-        const buyer=await Buyer.findById(req.userId);
-        res.json({
-            success:true,
-            buyer
-        })
-    } catch (error) {
-        console.log(error);
-        res.status(500).json({success:false,message:"Buyer Profile Error"});
-    }
+    const buyer = await Buyer.findById(req.userId);
+    res.json({
+      success: true,
+      buyer
+    })
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Buyer Profile Error" });
+  }
 })
 const fs = require("fs");
 
@@ -964,7 +964,7 @@ app.put(
   upload.fields([
     { name: "profileImage", maxCount: 1 },
     { name: "files", maxCount: 10 }
-  ]),auth,
+  ]), auth,
   async (req, res) => {
     try {
       const seller = await Seller.findById(req.userId);
@@ -1066,7 +1066,7 @@ app.put("/api/ratings/:id/reply", auth, async (req, res) => {
   }
 });
 
-   app.delete("/api/delete_location_image/:filename",auth, async (req, res) => {
+app.delete("/api/delete_location_image/:filename", auth, async (req, res) => {
   try {
 
     const { filename } = req.params;
@@ -1084,16 +1084,16 @@ app.put("/api/ratings/:id/reply", auth, async (req, res) => {
   }
 });
 
-app.get("/api/product_views",auth, async (req, res) => {
+app.get("/api/product_views", auth, async (req, res) => {
   try {
     const products = await Product.find({ seller: req.userId });
 
-const totalViews = products.reduce((sum, p) => sum + p.views, 0);
+    const totalViews = products.reduce((sum, p) => sum + p.views, 0);
 
-res.json({
-  success: true,
-  totalViews
-});
+    res.json({
+      success: true,
+      totalViews
+    });
 
   } catch (error) {
     console.log(error);
@@ -1109,7 +1109,7 @@ const io = new Server(httpServer, {
     origin: "https://isonga-frontend.vercel.app",
     methods: ["GET", "POST"],
   },
- transports: ["polling", "websocket"],
+  transports: ["polling", "websocket"],
   pingTimeout: 60000, // Increase timeout for slower connections
 });
 // Store online users
@@ -1137,274 +1137,274 @@ io.on("connection", (socket) => {
   // =========================
   // USER ONLINE
   // =========================
- socket.on("userOnline", ({ userModel }) => {
-  if (!socket.userId || !userModel) return;
+  socket.on("userOnline", ({ userModel }) => {
+    if (!socket.userId || !userModel) return;
 
-  const model =
-    userModel.charAt(0).toUpperCase() + userModel.slice(1).toLowerCase();
+    const model =
+      userModel.charAt(0).toUpperCase() + userModel.slice(1).toLowerCase();
 
-  const key = `${model}_${socket.userId}`;
+    const key = `${model}_${socket.userId}`;
 
-  if (!onlineUsers.has(key)) {
-    onlineUsers.set(key, new Set());
-  }
+    if (!onlineUsers.has(key)) {
+      onlineUsers.set(key, new Set());
+    }
 
-  onlineUsers.get(key).add(socket.id);
-  socket.userKey = key;
+    onlineUsers.get(key).add(socket.id);
+    socket.userKey = key;
 
-  socket.join(key);
+    socket.join(key);
 
-  console.log("USER ONLINE:", key);
-});
+    console.log("USER ONLINE:", key);
+  });
 
 
   // =========================
   // JOIN CHAT ROOM
   // =========================
-socket.on("joinRoom", ({ senderId, senderModel, receiverId, receiverModel }) => {
-  if (!senderId || !receiverId || !senderModel || !receiverModel) return;
+  socket.on("joinRoom", ({ senderId, senderModel, receiverId, receiverModel }) => {
+    if (!senderId || !receiverId || !senderModel || !receiverModel) return;
 
-  const buyerId = senderModel === "Buyer" ? senderId : receiverId;
-  const sellerId = senderModel === "Seller" ? senderId : receiverId;
+    const buyerId = senderModel === "Buyer" ? senderId : receiverId;
+    const sellerId = senderModel === "Seller" ? senderId : receiverId;
 
-  const room = `Buyer_${buyerId}__Seller_${sellerId}`;
-  socket.join(room);
+    const room = `Buyer_${buyerId}__Seller_${sellerId}`;
+    socket.join(room);
 
-  console.log(`Socket ${socket.id} joined room: ${room}`);
-});
-
-// =========================
-socket.on("sendMessage", async (data) => {
-  try {
-    // 1. Extract the new fields (productId and replyTo) from data
-    const { 
-      sender, senderModel, receiver, receiverModel, 
-      message, files, productId, replyTo 
-    } = data;
-
-    if (!sender || !receiver || (!message && (!files || files.length === 0))) return;
-
-    const room =
-      senderModel === "Buyer"
-        ? `Buyer_${sender}__Seller_${receiver}`
-        : `Buyer_${receiver}__Seller_${sender}`;
-
-        const Conversation = require("./models/Conversation");
-
-await Conversation.updateOne(
-  { room },
-  {
-    $setOnInsert: {
-      room,
-      participants: [sender, receiver],
-    },
-  },
-  { upsert: true }
-);
-
-// ✅ FIX: restore deleted conversations when new message arrives
-await Conversation.findOneAndUpdate(
-  { room },
-  {
-    $pull: {
-      deletedFor: {
-        $in: [
-          new mongoose.Types.ObjectId(sender),
-          new mongoose.Types.ObjectId(receiver),
-        ],
-      },
-    },
-  }
-);
-    // 2. Save message with the new fields
-    const newMessage = await Message.create({
-      sender,
-      senderModel,
-      receiver,
-      receiverModel,
-      message: message || "",
-      files: files || [],
-      room,
-      productId: productId || null, // Saves the product being discussed
-      replyTo: replyTo || null,     // Saves the ID of the message being replied to
-      read: false
-    });
-    // 3. IMPORTANT: Populate the replyTo and productId fields 
-    // This ensures the receiver gets the actual TEXT of the reply, not just an ID.
-    const populatedMessage = await Message.findById(newMessage._id)
-      .populate({
-        path: "replyTo",
-        select: "message files sender senderModel" // Only get what's needed for the quote box
-      })
-      .populate("productId", "name price files"); // Get product details for the tag
-
-    // 4. Count unread messages
-    const unreadCount = await Message.countDocuments({
-      room,
-      receiver,
-      receiverModel,
-      read: false
-    });
-
-    const messageData = {
-      ...populatedMessage.toObject(),
-      unreadCount
-    };
-
-    // 5. Emit the FULL populated message to the room
-    io.to(room).emit("receiveMessage", messageData);
-
-    // 6. Emit notification to receiver
-    const normalize = (m) =>
-  m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
-
-const receiverKey = `${normalize(receiverModel)}_${receiver}`;
-    const receiverSockets = onlineUsers.get(receiverKey);
-
-if (receiverSockets) {
-  receiverSockets.forEach(socketId => {
-    io.to(socketId).emit("newMessageNotification", {
-      room,
-      sender,
-      senderModel,
-      receiver,
-      receiverModel,
-      message,
-      unreadCount,
-      replyTo: messageData.replyTo,
-      createdAt: newMessage.createdAt
-    });
+    console.log(`Socket ${socket.id} joined room: ${room}`);
   });
-}
 
-  } catch (error) {
-    console.error("SendMessage Error:", error);
-  }
-});
+  // =========================
+  socket.on("sendMessage", async (data) => {
+    try {
+      // 1. Extract the new fields (productId and replyTo) from data
+      const {
+        sender, senderModel, receiver, receiverModel,
+        message, files, productId, replyTo
+      } = data;
 
-// =========================
-// TYPING INDICATOR (FIXED)
-// =========================
-socket.on("typing", ({ room, senderId }) => {
-  if (!room || !senderId) return;
+      if (!sender || !receiver || (!message && (!files || files.length === 0))) return;
 
-  socket.to(room).emit("typing", {
-    senderId,
-  });
-});
+      const room =
+        senderModel === "Buyer"
+          ? `Buyer_${sender}__Seller_${receiver}`
+          : `Buyer_${receiver}__Seller_${sender}`;
 
-socket.on("stopTyping", ({ room }) => {
-  if (!room) return;
+      const Conversation = require("./models/Conversation");
 
-  socket.to(room).emit("stopTyping");
-});
-
-app.post("/api/chat/upload",auth, upload.array("files",10), (req,res)=>{
-
-try{
-
-if(!req.files || req.files.length===0){
-return res.json({success:false,message:"No files uploaded"});
-}
-
-const fileUrls = req.files.map(file => file.path);
-
-res.json({
-success:true,
-files:fileUrls
-});
-
-}catch(error){
-
-console.log(error);
-
-res.status(500).json({
-success:false,
-message:"Upload failed"
-});
-
-}
-
-});
-
-// =========================
-// MARK MESSAGES AS READ
-// =========================
-socket.on("messagesRead", async ({ room }) => {
-  try {
-    // Find all unread messages for this room and mark them as read
-    await Message.updateMany(
-      { room, read: false },
-      { $set: { read: true } }
-    );
-
-    // Notify all sockets in the room to update unread count
-    io.to(room).emit("messagesRead", { room });
-
-  } catch (err) {
-    console.error("messagesRead Error:", err);
-  }
-});
-
-socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
-  try {
-    const message = await Message.findById(messageId);
-    if (!message) return;
-
-    const userId = socket.userId;
-
-    if (forEveryone) {
-      // only sender can delete for everyone
-      if (message.sender.toString() !== userId) return;
-
-      await Message.findByIdAndUpdate(messageId, {
-        message: "This message was deleted",
-        files: [],
-        deletedForEveryone: true,
-      });
-    } else {
-      // delete for me only
-      await Message.findByIdAndUpdate(messageId, {
-        $addToSet: {
-          deletedFor: new mongoose.Types.ObjectId(userId),
+      await Conversation.updateOne(
+        { room },
+        {
+          $setOnInsert: {
+            room,
+            participants: [sender, receiver],
+          },
         },
+        { upsert: true }
+      );
+
+      // ✅ FIX: restore deleted conversations when new message arrives
+      await Conversation.findOneAndUpdate(
+        { room },
+        {
+          $pull: {
+            deletedFor: {
+              $in: [
+                new mongoose.Types.ObjectId(sender),
+                new mongoose.Types.ObjectId(receiver),
+              ],
+            },
+          },
+        }
+      );
+      // 2. Save message with the new fields
+      const newMessage = await Message.create({
+        sender,
+        senderModel,
+        receiver,
+        receiverModel,
+        message: message || "",
+        files: files || [],
+        room,
+        productId: productId || null, // Saves the product being discussed
+        replyTo: replyTo || null,     // Saves the ID of the message being replied to
+        read: false
       });
+      // 3. IMPORTANT: Populate the replyTo and productId fields 
+      // This ensures the receiver gets the actual TEXT of the reply, not just an ID.
+      const populatedMessage = await Message.findById(newMessage._id)
+        .populate({
+          path: "replyTo",
+          select: "message files sender senderModel" // Only get what's needed for the quote box
+        })
+        .populate("productId", "name price files"); // Get product details for the tag
+
+      // 4. Count unread messages
+      const unreadCount = await Message.countDocuments({
+        room,
+        receiver,
+        receiverModel,
+        read: false
+      });
+
+      const messageData = {
+        ...populatedMessage.toObject(),
+        unreadCount
+      };
+
+      // 5. Emit the FULL populated message to the room
+      io.to(room).emit("receiveMessage", messageData);
+
+      // 6. Emit notification to receiver
+      const normalize = (m) =>
+        m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+
+      const receiverKey = `${normalize(receiverModel)}_${receiver}`;
+      const receiverSockets = onlineUsers.get(receiverKey);
+
+      if (receiverSockets) {
+        receiverSockets.forEach(socketId => {
+          io.to(socketId).emit("newMessageNotification", {
+            room,
+            sender,
+            senderModel,
+            receiver,
+            receiverModel,
+            message,
+            unreadCount,
+            replyTo: messageData.replyTo,
+            createdAt: newMessage.createdAt
+          });
+        });
+      }
+
+    } catch (error) {
+      console.error("SendMessage Error:", error);
+    }
+  });
+
+  // =========================
+  // TYPING INDICATOR (FIXED)
+  // =========================
+  socket.on("typing", ({ room, senderId }) => {
+    if (!room || !senderId) return;
+
+    socket.to(room).emit("typing", {
+      senderId,
+    });
+  });
+
+  socket.on("stopTyping", ({ room }) => {
+    if (!room) return;
+
+    socket.to(room).emit("stopTyping");
+  });
+
+  app.post("/api/chat/upload", auth, upload.array("files", 10), (req, res) => {
+
+    try {
+
+      if (!req.files || req.files.length === 0) {
+        return res.json({ success: false, message: "No files uploaded" });
+      }
+
+      const fileUrls = req.files.map(file => file.path);
+
+      res.json({
+        success: true,
+        files: fileUrls
+      });
+
+    } catch (error) {
+
+      console.log(error);
+
+      res.status(500).json({
+        success: false,
+        message: "Upload failed"
+      });
+
     }
 
-    io.to(room).emit("messageDeleted", {
-      messageId,
-      forEveryone,
-      userId,
-    });
+  });
 
-  } catch (err) {
-    console.error("Delete Error:", err);
-  }
-});
+  // =========================
+  // MARK MESSAGES AS READ
+  // =========================
+  socket.on("messagesRead", async ({ room }) => {
+    try {
+      // Find all unread messages for this room and mark them as read
+      await Message.updateMany(
+        { room, read: false },
+        { $set: { read: true } }
+      );
 
-const mongoose = require("mongoose");
+      // Notify all sockets in the room to update unread count
+      io.to(room).emit("messagesRead", { room });
 
-socket.on("deleteConversation", async ({ room }) => {
-  try {
-    const userId = socket.userId;
+    } catch (err) {
+      console.error("messagesRead Error:", err);
+    }
+  });
 
-    console.log("DELETE REQUEST:", { userId, room });
+  socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
+    try {
+      const message = await Message.findById(messageId);
+      if (!message) return;
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+      const userId = socket.userId;
 
-    const result = await Conversation.findOneAndUpdate(
-      { room },
-      { $addToSet: { deletedFor: userObjectId } },
-      { upsert: true, new: true }
-    );
+      if (forEveryone) {
+        // only sender can delete for everyone
+        if (message.sender.toString() !== userId) return;
 
-    console.log("UPDATED CONVERSATION:", result);
+        await Message.findByIdAndUpdate(messageId, {
+          message: "This message was deleted",
+          files: [],
+          deletedForEveryone: true,
+        });
+      } else {
+        // delete for me only
+        await Message.findByIdAndUpdate(messageId, {
+          $addToSet: {
+            deletedFor: new mongoose.Types.ObjectId(userId),
+          },
+        });
+      }
 
-    io.to(room).emit("conversationDeleted", { room });
-  } catch (err) {
-    console.error(err);
-  }
-});
+      io.to(room).emit("messageDeleted", {
+        messageId,
+        forEveryone,
+        userId,
+      });
+
+    } catch (err) {
+      console.error("Delete Error:", err);
+    }
+  });
+
+  const mongoose = require("mongoose");
+
+  socket.on("deleteConversation", async ({ room }) => {
+    try {
+      const userId = socket.userId;
+
+      console.log("DELETE REQUEST:", { userId, room });
+
+      const userObjectId = new mongoose.Types.ObjectId(userId);
+
+      const result = await Conversation.findOneAndUpdate(
+        { room },
+        { $addToSet: { deletedFor: userObjectId } },
+        { upsert: true, new: true }
+      );
+
+      console.log("UPDATED CONVERSATION:", result);
+
+      io.to(room).emit("conversationDeleted", { room });
+    } catch (err) {
+      console.error(err);
+    }
+  });
   // =========================
   // USER DISCONNECT
   // =========================
@@ -1412,21 +1412,21 @@ socket.on("deleteConversation", async ({ room }) => {
 
     console.log("Socket disconnected:", socket.id);
 
-   if (socket.userKey && onlineUsers.has(socket.userKey)) {
-  const userSockets = onlineUsers.get(socket.userKey);
+    if (socket.userKey && onlineUsers.has(socket.userKey)) {
+      const userSockets = onlineUsers.get(socket.userKey);
 
-  userSockets.delete(socket.id);
+      userSockets.delete(socket.id);
 
-  if (userSockets.size === 0) {
-    onlineUsers.delete(socket.userKey);
-  }
-}
+      if (userSockets.size === 0) {
+        onlineUsers.delete(socket.userKey);
+      }
+    }
 
   });
 
 });
 // Add this to your server.js
-app.get("/api/get_buyer/:id",auth, async (req, res) => {
+app.get("/api/get_buyer/:id", auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.params.id).select("name profile");
     if (!buyer) return res.json({ success: false, message: "Buyer not found" });
@@ -1592,20 +1592,20 @@ app.get("/api/messages/:room", async (req, res) => {
   }
 });
 
-app.put("/api/messages/read/:room",auth, async (req, res) => {
+app.put("/api/messages/read/:room", auth, async (req, res) => {
   try {
     const userId = req.userId;
-    
+
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     // This updates messages where YOU are the receiver and they are currently unread
     const result = await Message.updateMany(
-      { 
-        room: req.params.room, 
+      {
+        room: req.params.room,
         receiver: userId, // Essential: only mark messages sent TO you
-        read: false 
+        read: false
       },
       { $set: { read: true } }
     );
@@ -1646,7 +1646,7 @@ app.delete("/api/messages/delete/:id", auth, async (req, res) => {
   }
 });
 // In server.js
-app.get("/api/get_seller/:id",auth, async (req, res) => {
+app.get("/api/get_seller/:id", auth, async (req, res) => {
   const seller = await Seller.findById(req.params.id).select("name profile");
   if (!seller) return res.json({ success: false });
   res.json({ success: true, seller });
@@ -1849,77 +1849,77 @@ app.get("/api/sellers/search", async (req, res) => {
   }
 });
 
-app.post("/api/cart/add",auth, async (req, res) => {
-    try {
-        const { productId, quantity } = req.body;
-        const buyerId = req.userId;
+app.post("/api/cart/add", auth, async (req, res) => {
+  try {
+    const { productId, quantity } = req.body;
+    const buyerId = req.userId;
 
-        if (!buyerId) {
-            return res.status(401).json({ success: false, message: "Please login to add items to cart" });
-        }
-
-        const product = await Product.findById(productId);
-        if (!product || product.quantity < quantity) {
-            return res.json({ success: false, message: "Product unavailable or insufficient stock" });
-        }
-
-        let cart = await Cart.findOne({ buyer: buyerId });
-
-        if (!cart) {
-            // Create new cart if none exists
-            cart = await Cart.create({
-                buyer: buyerId,
-                items: [{ product: productId, quantity, price: product.price }],
-                totalPrice: product.price * quantity
-            });
-        } else {
-            // Check if product exists in cart
-            const itemIndex = cart.items.findIndex(p => p.product.toString() === productId);
-
-            if (itemIndex > -1) {
-                cart.items[itemIndex].quantity += Number(quantity);
-            } else {
-                cart.items.push({ product: productId, quantity, price: product.price });
-            }
-            
-            // Recalculate Total
-            cart.totalPrice = cart.items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
-            await cart.save();
-        }
-
-        res.json({ success: true, message: "Added to cart", cartCount: cart.items.length });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: "Cart Error" });
+    if (!buyerId) {
+      return res.status(401).json({ success: false, message: "Please login to add items to cart" });
     }
+
+    const product = await Product.findById(productId);
+    if (!product || product.quantity < quantity) {
+      return res.json({ success: false, message: "Product unavailable or insufficient stock" });
+    }
+
+    let cart = await Cart.findOne({ buyer: buyerId });
+
+    if (!cart) {
+      // Create new cart if none exists
+      cart = await Cart.create({
+        buyer: buyerId,
+        items: [{ product: productId, quantity, price: product.price }],
+        totalPrice: product.price * quantity
+      });
+    } else {
+      // Check if product exists in cart
+      const itemIndex = cart.items.findIndex(p => p.product.toString() === productId);
+
+      if (itemIndex > -1) {
+        cart.items[itemIndex].quantity += Number(quantity);
+      } else {
+        cart.items.push({ product: productId, quantity, price: product.price });
+      }
+
+      // Recalculate Total
+      cart.totalPrice = cart.items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
+      await cart.save();
+    }
+
+    res.json({ success: true, message: "Added to cart", cartCount: cart.items.length });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Cart Error" });
+  }
 });
 
-app.get("/api/cart",auth, async (req, res) => {
-    try {
-        const buyer=await Buyer.findById(req.userId).select("profile");
-        const cart = await Cart.findOne({ buyer: req.userId })
-            .populate("items.product", "name price files location");
+app.get("/api/cart", auth, async (req, res) => {
+  try {
+    const buyer = await Buyer.findById(req.userId).select("profile");
+    const cart = await Cart.findOne({ buyer: req.userId })
+      .populate("items.product", "name price files location");
 
-        res.json({ success: true, cart,buyer });
-    } catch (error) {
-        res.status(500).json({ success: false });
-    }
+    res.json({ success: true, cart, buyer });
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
 });
 
-app.put("/api/cart/update",auth, async (req, res) => {
+app.put("/api/cart/update", auth, async (req, res) => {
   try {
 
     const { productId, quantity } = req.body;
 
     const cart = await Cart.findOne({ buyer: req.userId });
 
-    if (!cart) return res.json({ success:false });
+    if (!cart) return res.json({ success: false });
 
     const item = cart.items.find(
       i => i.product.toString() === productId
     );
 
-    if (!item) return res.json({ success:false });
+    if (!item) return res.json({ success: false });
 
     item.quantity = quantity;
 
@@ -1929,37 +1929,37 @@ app.put("/api/cart/update",auth, async (req, res) => {
 
     await cart.save();
 
-    res.json({ success:true, cart });
+    res.json({ success: true, cart });
 
   } catch (error) {
-    res.status(500).json({ success:false });
+    res.status(500).json({ success: false });
   }
 });
 
-app.get("/api/cart/count",auth, async (req,res)=>{
- try{
+app.get("/api/cart/count", auth, async (req, res) => {
+  try {
 
-   const cart = await Cart.findOne({
-     buyer:req.userId
-   });
+    const cart = await Cart.findOne({
+      buyer: req.userId
+    });
 
-   const count = cart ? cart.items.length : 0;
+    const count = cart ? cart.items.length : 0;
 
-   res.json({
-     success:true,
-     count
-   });
+    res.json({
+      success: true,
+      count
+    });
 
- }catch(error){
-   res.status(500).json({success:false});
- }
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
 });
 // ==========================================
 //  ORDER MANAGEMENT ROUTES
 // ==========================================
 
 // 1. PLACE ORDER (Buyer)
-app.post("/api/order",auth, upload.single("paymentProof"), async (req, res) => {
+app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => {
   try {
     const buyerId = req.userId;
     const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
@@ -1994,11 +1994,11 @@ app.post("/api/order",auth, upload.single("paymentProof"), async (req, res) => {
       status: "Pending"
     });
 
-   // Notify involved sellers via Socket.io
+    // Notify involved sellers via Socket.io
     const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
-    
+
     uniqueSellers.forEach(sellerId => {
-      const sellerRoom = `Seller_${sellerId}`; 
+      const sellerRoom = `Seller_${sellerId}`;
 
       // Use io.to(sellerRoom) to hit the room, not a specific ID
       // If 'io' is defined in your main server file, ensure it's accessible here
@@ -2013,643 +2013,647 @@ app.post("/api/order",auth, upload.single("paymentProof"), async (req, res) => {
     await Cart.findOneAndDelete({ buyer: buyerId });
 
     res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
-
-// 2. GET SELLER ORDERS
-app.get("/api/seller/orders",auth, async (req, res) => {
-  try {
-    const sellerId = req.userId;
-
-    // Find orders where at least one item belongs to this seller
-    const orders = await Order.find({ "items.seller": sellerId })
-      .populate("items.product", "name")
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, orders });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
-  }
-});
-
-// GET /api/orders/my-orders (For Buyers)
-app.get("/api/orders/my-orders", auth, async (req, res) => {
-  try {
-    if (req.role !== "buyer") {
-      return res.status(403).json({ success: false, message: "Unauthorized" });
-    }
-
-    // Find orders belonging to this buyer, sorted by newest update
-    const orders = await Order.find({ buyer: req.userId })
-      .sort({ updatedAt: -1 })
-      .populate("items.product", "name");
-
-    res.json({
-      success: true,
-      orders
-    });
-  } catch (error) {
-    console.error("Fetch Buyer Orders Error:", error);
+} catch (error) {
+    console.error("Order Creation Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-app.put("/api/order/status/:id", auth, async (req, res) => {
-  try {
-    const sellerId = req.userId;
-    const id = req.params.id;
-    const { status } = req.body;
-
-    const item = await Order.findById(id);
-
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
-
-    // Check ownership
-    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
-
-    if (!isOwner) {
-      return res.status(403).json({ success: false, message: "Not authorized" });
-    }
-
-    // Prevent duplicate updates
-    if (item.status !== "Pending") {
-      return res.json({ success: false, message: `Already ${item.status}` });
-    }
-
-    // Update status
-    item.status = status;
-    await item.save();
-
-    const displayId = item._id.toString().slice(-6).toUpperCase();
-
-    const notificationMessage =
-      status === "Accepted"
-        ? `✅ Your order #${displayId} has been accepted!`
-        : `❌ Your order #${displayId} was declined.`;
-
-    const newNotif = await Notification.create({
-      recipient: item.buyer,
-      sender: sellerId,
-      message: notificationMessage,
-      orderId: item._id,
-      read: false,
-      category: "Order"
-    });
-
-    const buyerKey = `Buyer_${item.buyer}`;
-   // ✅ NEW WAY
-const buyerRoom = `Buyer_${item.buyer}`;
-
-io.to(buyerRoom).emit("new_notification", {
-  _id: newNotif._id,
-  message: notificationMessage,
-  unreadCount, // Ensure you calculate this as you did before
-  orderId: item._id,
-  status,
-  createdAt: newNotif.createdAt
-});
-    
-
-    res.json({
-      success: true,
-      message: `Order ${status.toLowerCase()} successfully`,
-      data: item
-    });
-
-  } catch (err) {
-    console.error("🔥 Status Update Error:", err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
-// ✅ Add this route to handle fetching a single order by ID
-app.get("/api/orders/:id", auth, async (req, res) => {
-  try {
-    const orderId = req.params.id;
-
-    // Find the order and populate product details
-    const order = await Order.findById(orderId).populate("items.product");
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found in database",
-      });
-    }
-
-    // Security: Ensure the person requesting is either the Buyer or the Seller of this order
-    const isBuyer = order.buyer.toString() === req.userId.toString();
-    
-    // Check if the seller is involved in any item of this order
-    const isSeller = order.items.some(item => item.seller.toString() === req.userId.toString());
-
-    if (!isBuyer && !isSeller) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to view this order",
-      });
-    }
-
-    res.json({
-      success: true,
-      order,
-    });
-  } catch (err) {
-    console.error("🔥 Fetch Order Error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Server error while fetching order",
-    });
-  }
-});
-
-// ✅ CORRECTED: MARK ALL NOTIFICATIONS AS READ
-app.put("/api/notifications/mark-read", auth, async (req, res) => {
-  try {
-    // We update based on the 'read' boolean to match your unread-count route
-    const result = await Notification.updateMany(
-      { recipient: req.userId, read: false }, 
-      { $set: { read: true } }
-    );
-
-    res.json({ 
-      success: true, 
-      message: "Notifications marked as read",
-      modifiedCount: result.modifiedCount 
-    });
-  } catch (error) {
-    console.error("Mark Read Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-app.get("/api/notifications", auth, async (req, res) => {
-  try {
-    if (!req.userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    const notifications = await Notification.find({ recipient: req.userId })
-      .populate({
-        path: "sender",
-        select: "name profile",
-        options: { strictPopulate: false } // ✅ prevents crash from old data
-      })
-      .sort({ createdAt: -1 })
-      .limit(20);
-
-    res.json({
-      success: true,
-      notifications
-    });
-
-  } catch (error) {
-    console.error("🔥 Fetch Notif Error FULL:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// ✅ THIS ONE WAS ALREADY CORRECT
-app.get("/api/notifications/unread-count", auth, async (req, res) => {
-  try {
-    const count = await Notification.countDocuments({ 
-      recipient: req.userId, 
-      read: false 
-    });
-    
-    res.json({ success: true, count });
-  } catch (err) {
-    res.status(500).json({ success: false });
-  }
-});
-
-app.post("/api/rate_seller",auth, async (req, res) => {
-  try {
-    const { sellerId, rating, comment } = req.body;
-    const buyerId = req.userId;
-
-    if (!buyerId) return res.json({ success: false, message: "Login required" });
-
-    // 1. Save the rating
-    const newRating = await Rating.create({
-      buyer: buyerId,
-      seller: sellerId,
-      rating: Number(rating),
-      comment
-    });
-
-    // 2. RE-CALCULATE (To send fresh data to the dashboard)
-    const ratings = await Rating.find({ seller: sellerId });
-    const numReviews = ratings.length;
-    const averageRating = ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews;
-
-    // 3. SOCKET EMISSION (Real-time update)
-    const sellerKey = `Seller_${sellerId}`;
-    const sellerSocketId = onlineUsers.get(sellerKey);
-
-    if (sellerSocketId) {
-      io.to(sellerSocketId).emit("sellerRatingUpdated", {
-        averageRating: Number(averageRating.toFixed(1)),
-        numReviews: numReviews
-      });
-    }
-
-    res.json({ success: true, message: "Rating submitted!" });
-  } catch (error) {
-    res.status(500).json({ success: false });
-  }
-});
-
-app.get("/test-db", async (req, res) => {
-  try {
-    const collections = await mongoose.connection.db.listCollections().toArray();
-    res.send({ status: "OK", collections });
-  } catch (err) {
-    res.status(500).send({ status: "ERROR", message: err.message });
-  }
-});
-
-app.get("/api/buyer_profile",auth, async (req, res) => {
-  try {
-
-    const buyer = await Buyer.findById(req.userId);
-
-    res.json({ success: true, buyer });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-app.use((err, req, res, next) => {
-  console.error("Global error:", err);
-
-  res.status(500).json({
-    success:false,
-    message:"Server error",
-    error: err.message
-  });
-});
-
-// POST: Create a new booking
-// Note: "paymentProof" here must match the key used in formData.append() on frontend
-app.post("/api/bookService",auth, upload.single("paymentProof"), async (req, res) => {
-  try {
-
-    const { productId, name, phone, date, time, message, paymentMethod } = req.body;
-
-    // 2. Fetch the product to get the associated Seller ID
-    const productData = await Product.findById(productId);
-    if (!productData) {
-      return res.status(404).json({ success: false, message: "Service not found" });
-    }
-
-    // 3. Prepare the booking data
-    const bookingData = {
-      buyer: req.userId,
-      seller: productData.seller, // Automatically link the seller from the product
-      product: productId,
-      name,
-      phone,
-      date,
-      time,
-      message,
-      paymentMethod,
-      status: "Pending"
-    };
-
-    // 4. Handle the uploaded file if it exists
-    if (req.file) {
-      // Map the file path to your model's field name: paymentScreenshot
-      bookingData.paymentScreenshot = req.file.path; 
-    }
-
-    const newBooking = await Booking.create(bookingData);
-
-//  SEND REAL-TIME NOTIFICATION TO SELLER
-const sellerKey = `Seller_${productData.seller}`;
-const sellerSocketId = onlineUsers.get(sellerKey);
-
-if (sellerSocketId) {
-  io.to(sellerSocketId).emit("newBookingNotification", {
-    message: `New Booking from ${name}!`,
-    bookingId: newBooking._id,
-    date,
-    time
-  });
-}
-
-res.json({
-  success: true,
-  message: "Booking Sent Successfully!",
-  booking: newBooking
-});
-
-  } catch (error) {
-    console.error("Booking Route Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
-app.get("/api/seller/bookings",auth, async (req, res) => {
-  try {
-    const sellerId = req.userId;
-    if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
-
-    // We fetch everything so the frontend can decide what to show/hide
-    const bookings = await Booking.find({ seller: sellerId })
-      .populate("product", "name") 
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, bookings });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-app.put("/api/bookings/:id", auth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const sellerId = req.userId;
-
-    if (!sellerId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    const validStatuses = ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid status type" });
-    }
-
-    const updatedBooking = await Booking.findOneAndUpdate(
-      { _id: id, seller: sellerId },
-      { status, seen: true },
-      { new: true }
-    );
-
-    if (!updatedBooking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
-    }
-
-    // ✅ CREATE NOTIFICATION
-    const displayId = updatedBooking._id.toString().slice(-6).toUpperCase();
-
-    const notificationMessage =
-      status === "Accepted"
-        ? `✅ Your booking #${displayId} has been accepted!`
-        : `❌ Your booking #${displayId} was declined.`;
-
-    const newNotif = await Notification.create({
-      recipient: updatedBooking.buyer,   // ⚠️ MUST exist in Booking schema
-      sender: sellerId,
-      message: notificationMessage,
-      bookingId: updatedBooking._id,
-      read: false,
-      category: "Booking"
-    });
-
-    // ✅ SOCKET REAL-TIME
-    const buyerKey = `Buyer_${updatedBooking.buyer}`;
-    const buyerSocket = onlineUsers.get(buyerKey);
-
-    if (buyerSocket) {
-      const unreadCount = await Notification.countDocuments({
-        recipient: updatedBooking.buyer,
-        read: false
-      });
-
-      io.to(buyerSocket).emit("new_notification", {
-        _id: newNotif._id,
-        message: notificationMessage,
-        unreadCount,
-        orderId: updatedBooking._id,
-        status,
-        type: "Booking",
-        createdAt: newNotif.createdAt
-      });
-    }
-
-    res.json({ success: true, booking: updatedBooking });
-
-  } catch (error) {
-    console.error("🔥 Booking Update Error:", error);
-    res.status(500).json({ success: false, message: "Update Error" });
-  }
-});
-
-// ✅ GET SINGLE BOOKING (FIX)
-app.get("/api/bookings/:id", auth, async (req, res) => {
-  try {
-    const bookingId = req.params.id;
-
-    const booking = await Booking.findById(bookingId)
-      .populate("product");
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: "Booking not found",
-      });
-    }
-
-    // ✅ Security check (same as order)
-    const isBuyer = booking.buyer.toString() === req.userId.toString();
-    const isSeller = booking.seller.toString() === req.userId.toString();
-
-    if (!isBuyer && !isSeller) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to view this booking",
-      });
-    }
-
-    res.json({
-      success: true,
-      booking,
-    });
-
-  } catch (err) {
-    console.error("🔥 Fetch Booking Error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Server error while fetching booking",
-    });
-  }
-});
-
-app.put("/api/update_buyer_profile",auth, upload.single("profile"), async (req,res)=>{
-
-try{
-
-const buyerId = req.userId;
-
-const buyer = await Buyer.findById(buyerId);
-
-if(!buyer){
-return res.json({success:false});
-}
-
-buyer.name = req.body.name;
-
-if(req.body.password){
-buyer.password = await bcrypt.hash(req.body.password,10);
-}
-
-if(req.file){
-buyer.profile = req.file.path;
-}
-
-await buyer.save();
-
-res.json({success:true,buyer});
-
-}catch(err){
-console.log(err);
-res.json({success:false});
-}
-
-});
-app.delete("/api/cart/remove/:id",auth, async (req, res) => {
-  try {
-    const buyerId = req.userId;
-
-    const identifier = req.params.id;
-
-    const cart = await Cart.findOne({ buyer: buyerId });
-    if (!cart) {
-      return res.status(404).json({ success: false, message: "Cart not found" });
-    }
-
-    cart.items = cart.items.filter((item) => {
-      const isProductIdMatch =
-        item.product && item.product.toString() === identifier;
-
-      const isCartItemIdMatch =
-        item._id.toString() === identifier;
-
-      return !isProductIdMatch && !isCartItemIdMatch;
-    });
-
-    cart.totalPrice = cart.items.reduce(
-      (acc, item) => acc + item.price * item.quantity,
-      0
-    );
-
-    await cart.save();
-
-    res.json({
-      success: true,
-      message: "Item removed from cart",
-      cart
-    });
-
-  } catch (error) {
-    console.error("Remove from cart error:", error);
-    res.status(500).json({ success: false });
-  }
-});
-
-app.post("/api/seller/mark-activity-read",auth, async (req, res) => {
-  try {
-    const sellerId = req.userId;
-
-    if (!sellerId) {
-      return res.status(401).json({ success: false });
-    }
-
-    const seller = await Seller.findById(sellerId);
-
-    if (!seller) {
-      return res.json({ success: false });
-    }
-
-    if (seller.sellerType === "Service") {
-      // BOOKINGS
-      await Booking.updateMany(
-        { seller: sellerId, status: "Pending" },
-        { $set: { status: "Seen" } }
-      );
-    } else {
-      // ORDERS
-      await Order.updateMany(
-        { "items.seller": sellerId, status: "Pending" },
-        { $set: { seen: true } }
-      );
-    }
-
-    res.json({ success: true });
-
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false });
-  }
-});
-
-app.post("/api/seller/view/:id",auth, async (req, res) => {
-  try {
-    const sellerId = req.params.id;
-    const buyerId = req.userId;
-
-    if (!buyerId) return res.json({ success: false, message: "Guest view" });
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const seller = await Seller.findById(sellerId);
-    if (!seller) return res.json({ success: false });
-
-    // Check if there is an entry for today's date
-    let todayEntry = seller.dailyViews.find(
-      (d) => new Date(d.date).getTime() === today.getTime()
-    );
-
-    if (!todayEntry) {
-      // First visitor of the day
-      seller.dailyViews.push({ date: today, buyers: [buyerId] });
-      seller.views += 1;
-    } else {
-      // Check if THIS buyer has already been counted today
-      const hasViewed = todayEntry.buyers.includes(buyerId);
-      if (!hasViewed) {
-        todayEntry.buyers.push(buyerId);
-        seller.views += 1;
-      } else {
-        // Already counted this buyer today - do nothing
-        return res.json({ success: true, message: "Already visited today" });
+  } // <--- Added this to close 'catch'
+}); //
+    // 2. GET SELLER ORDERS
+    app.get("/api/seller/orders", auth, async (req, res) => {
+      try {
+        const sellerId = req.userId;
+
+        // Find orders where at least one item belongs to this seller
+        const orders = await Order.find({ "items.seller": sellerId })
+          .populate("items.product", "name")
+          .sort({ createdAt: -1 });
+
+        res.json({ success: true, orders });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false });
       }
-    }
+    });
 
-    await seller.save();
-    const sellerKey = `Seller_${sellerId}`;
-const sellerSocket = onlineUsers.get(sellerKey);
+    // GET /api/orders/my-orders (For Buyers)
+    app.get("/api/orders/my-orders", auth, async (req, res) => {
+      try {
+        if (req.role !== "buyer") {
+          return res.status(403).json({ success: false, message: "Unauthorized" });
+        }
 
-if (sellerSocket) {
-  const todayEntry = seller.dailyViews.find(
-    d => new Date(d.date).getTime() === today.getTime()
-  );
+        // Find orders belonging to this buyer, sorted by newest update
+        const orders = await Order.find({ buyer: req.userId })
+          .sort({ updatedAt: -1 })
+          .populate("items.product", "name");
 
-  io.to(sellerSocket).emit("newView", {
-    totalViews: seller.views,
-    todayViews: todayEntry ? todayEntry.buyers.length : 0
-  });
-}
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false });
-  }
-});
+        res.json({
+          success: true,
+          orders
+        });
+      } catch (error) {
+        console.error("Fetch Buyer Orders Error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+      }
+    });
 
-app.post("/api/logout", (req, res) => {
-  res.json({
-    success: true,
-    message: "Logged out successfully"
-  });
-});
-// START SERVER
-// ==============================
-const PORT = process.env.PORT;
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-});
+    app.put("/api/order/status/:id", auth, async (req, res) => {
+      try {
+        const sellerId = req.userId;
+        const id = req.params.id;
+        const { status } = req.body;
+
+        const item = await Order.findById(id);
+
+        if (!item) {
+          return res.status(404).json({ success: false, message: "Order not found" });
+        }
+
+        // Check ownership
+        const isOwner = item.items.some(i => i.seller.toString() === sellerId);
+
+        if (!isOwner) {
+          return res.status(403).json({ success: false, message: "Not authorized" });
+        }
+
+        // Prevent duplicate updates
+        if (item.status !== "Pending") {
+          return res.json({ success: false, message: `Already ${item.status}` });
+        }
+
+        // Update status
+        item.status = status;
+        await item.save();
+
+        const displayId = item._id.toString().slice(-6).toUpperCase();
+
+        const notificationMessage =
+          status === "Accepted"
+            ? `✅ Your order #${displayId} has been accepted!`
+            : `❌ Your order #${displayId} was declined.`;
+
+        const newNotif = await Notification.create({
+          recipient: item.buyer,
+          sender: sellerId,
+          message: notificationMessage,
+          orderId: item._id,
+          read: false,
+          category: "Order"
+        });
+
+        const buyerKey = `Buyer_${item.buyer}`;
+        // ✅ NEW WAY
+        const buyerRoom = `Buyer_${item.buyer}`;
+
+        io.to(buyerRoom).emit("new_notification", {
+          _id: newNotif._id,
+          message: notificationMessage,
+          unreadCount, // Ensure you calculate this as you did before
+          orderId: item._id,
+          status,
+          createdAt: newNotif.createdAt
+        });
+
+
+        res.json({
+          success: true,
+          message: `Order ${status.toLowerCase()} successfully`,
+          data: item
+        });
+
+      } catch (err) {
+        console.error("🔥 Status Update Error:", err);
+        res.status(500).json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    // ✅ Add this route to handle fetching a single order by ID
+    app.get("/api/orders/:id", auth, async (req, res) => {
+      try {
+        const orderId = req.params.id;
+
+        // Find the order and populate product details
+        const order = await Order.findById(orderId).populate("items.product");
+
+        if (!order) {
+          return res.status(404).json({
+            success: false,
+            message: "Order not found in database",
+          });
+        }
+
+        // Security: Ensure the person requesting is either the Buyer or the Seller of this order
+        const isBuyer = order.buyer.toString() === req.userId.toString();
+
+        // Check if the seller is involved in any item of this order
+        const isSeller = order.items.some(item => item.seller.toString() === req.userId.toString());
+
+        if (!isBuyer && !isSeller) {
+          return res.status(403).json({
+            success: false,
+            message: "Not authorized to view this order",
+          });
+        }
+
+        res.json({
+          success: true,
+          order,
+        });
+      } catch (err) {
+        console.error("🔥 Fetch Order Error:", err);
+        res.status(500).json({
+          success: false,
+          message: "Server error while fetching order",
+        });
+      }
+    });
+
+    // ✅ CORRECTED: MARK ALL NOTIFICATIONS AS READ
+    app.put("/api/notifications/mark-read", auth, async (req, res) => {
+      try {
+        // We update based on the 'read' boolean to match your unread-count route
+        const result = await Notification.updateMany(
+          { recipient: req.userId, read: false },
+          { $set: { read: true } }
+        );
+
+        res.json({
+          success: true,
+          message: "Notifications marked as read",
+          modifiedCount: result.modifiedCount
+        });
+      } catch (error) {
+        console.error("Mark Read Error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+      }
+    });
+
+    app.get("/api/notifications", auth, async (req, res) => {
+      try {
+        if (!req.userId) {
+          return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        const notifications = await Notification.find({ recipient: req.userId })
+          .populate({
+            path: "sender",
+            select: "name profile",
+            options: { strictPopulate: false } // ✅ prevents crash from old data
+          })
+          .sort({ createdAt: -1 })
+          .limit(20);
+
+        res.json({
+          success: true,
+          notifications
+        });
+
+      } catch (error) {
+        console.error("🔥 Fetch Notif Error FULL:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
+    // ✅ THIS ONE WAS ALREADY CORRECT
+    app.get("/api/notifications/unread-count", auth, async (req, res) => {
+      try {
+        const count = await Notification.countDocuments({
+          recipient: req.userId,
+          read: false
+        });
+
+        res.json({ success: true, count });
+      } catch (err) {
+        res.status(500).json({ success: false });
+      }
+    });
+
+    app.post("/api/rate_seller", auth, async (req, res) => {
+      try {
+        const { sellerId, rating, comment } = req.body;
+        const buyerId = req.userId;
+
+        if (!buyerId) return res.json({ success: false, message: "Login required" });
+
+        // 1. Save the rating
+        const newRating = await Rating.create({
+          buyer: buyerId,
+          seller: sellerId,
+          rating: Number(rating),
+          comment
+        });
+
+        // 2. RE-CALCULATE (To send fresh data to the dashboard)
+        const ratings = await Rating.find({ seller: sellerId });
+        const numReviews = ratings.length;
+        const averageRating = ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews;
+
+        // 3. SOCKET EMISSION (Real-time update)
+        const sellerKey = `Seller_${sellerId}`;
+        const sellerSocketId = onlineUsers.get(sellerKey);
+
+        if (sellerSocketId) {
+          io.to(sellerSocketId).emit("sellerRatingUpdated", {
+            averageRating: Number(averageRating.toFixed(1)),
+            numReviews: numReviews
+          });
+        }
+
+        res.json({ success: true, message: "Rating submitted!" });
+      } catch (error) {
+        res.status(500).json({ success: false });
+      }
+    });
+
+    app.get("/test-db", async (req, res) => {
+      try {
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        res.send({ status: "OK", collections });
+      } catch (err) {
+        res.status(500).send({ status: "ERROR", message: err.message });
+      }
+    });
+
+    app.get("/api/buyer_profile", auth, async (req, res) => {
+      try {
+
+        const buyer = await Buyer.findById(req.userId);
+
+        res.json({ success: true, buyer });
+
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+    app.use((err, req, res, next) => {
+      console.error("Global error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: err.message
+      });
+    });
+
+    // POST: Create a new booking
+    // Note: "paymentProof" here must match the key used in formData.append() on frontend
+    app.post("/api/bookService", auth, upload.single("paymentProof"), async (req, res) => {
+      try {
+
+        const { productId, name, phone, date, time, message, paymentMethod } = req.body;
+
+        // 2. Fetch the product to get the associated Seller ID
+        const productData = await Product.findById(productId);
+        if (!productData) {
+          return res.status(404).json({ success: false, message: "Service not found" });
+        }
+
+        // 3. Prepare the booking data
+        const bookingData = {
+          buyer: req.userId,
+          seller: productData.seller, // Automatically link the seller from the product
+          product: productId,
+          name,
+          phone,
+          date,
+          time,
+          message,
+          paymentMethod,
+          status: "Pending"
+        };
+
+        // 4. Handle the uploaded file if it exists
+        if (req.file) {
+          // Map the file path to your model's field name: paymentScreenshot
+          bookingData.paymentScreenshot = req.file.path;
+        }
+
+        const newBooking = await Booking.create(bookingData);
+
+        //  SEND REAL-TIME NOTIFICATION TO SELLER
+        const sellerKey = `Seller_${productData.seller}`;
+        const sellerSocketId = onlineUsers.get(sellerKey);
+
+        if (sellerSocketId) {
+          io.to(sellerSocketId).emit("newBookingNotification", {
+            message: `New Booking from ${name}!`,
+            bookingId: newBooking._id,
+            date,
+            time
+          });
+        }
+
+        res.json({
+          success: true,
+          message: "Booking Sent Successfully!",
+          booking: newBooking
+        });
+
+      } catch (error) {
+        console.error("Booking Route Error:", error);
+        res.status(500).json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    app.get("/api/seller/bookings", auth, async (req, res) => {
+      try {
+        const sellerId = req.userId;
+        if (!sellerId) return res.json({ success: false, message: "Unauthorized" });
+
+        // We fetch everything so the frontend can decide what to show/hide
+        const bookings = await Booking.find({ seller: sellerId })
+          .populate("product", "name")
+          .sort({ createdAt: -1 });
+
+        res.json({ success: true, bookings });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server Error" });
+      }
+    });
+
+    app.put("/api/bookings/:id", auth, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body;
+        const sellerId = req.userId;
+
+        if (!sellerId) {
+          return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        const validStatuses = ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"];
+        if (!validStatuses.includes(status)) {
+          return res.status(400).json({ success: false, message: "Invalid status type" });
+        }
+
+        const updatedBooking = await Booking.findOneAndUpdate(
+          { _id: id, seller: sellerId },
+          { status, seen: true },
+          { new: true }
+        );
+
+        if (!updatedBooking) {
+          return res.status(404).json({ success: false, message: "Booking not found" });
+        }
+
+        // ✅ CREATE NOTIFICATION
+        const displayId = updatedBooking._id.toString().slice(-6).toUpperCase();
+
+        const notificationMessage =
+          status === "Accepted"
+            ? `✅ Your booking #${displayId} has been accepted!`
+            : `❌ Your booking #${displayId} was declined.`;
+
+        const newNotif = await Notification.create({
+          recipient: updatedBooking.buyer,   // ⚠️ MUST exist in Booking schema
+          sender: sellerId,
+          message: notificationMessage,
+          bookingId: updatedBooking._id,
+          read: false,
+          category: "Booking"
+        });
+
+        // ✅ SOCKET REAL-TIME
+        const buyerKey = `Buyer_${updatedBooking.buyer}`;
+        const buyerSocket = onlineUsers.get(buyerKey);
+
+        if (buyerSocket) {
+          const unreadCount = await Notification.countDocuments({
+            recipient: updatedBooking.buyer,
+            read: false
+          });
+
+          io.to(buyerSocket).emit("new_notification", {
+            _id: newNotif._id,
+            message: notificationMessage,
+            unreadCount,
+            orderId: updatedBooking._id,
+            status,
+            type: "Booking",
+            createdAt: newNotif.createdAt
+          });
+        }
+
+        res.json({ success: true, booking: updatedBooking });
+
+      } catch (error) {
+        console.error("🔥 Booking Update Error:", error);
+        res.status(500).json({ success: false, message: "Update Error" });
+      }
+    });
+
+    // ✅ GET SINGLE BOOKING (FIX)
+    app.get("/api/bookings/:id", auth, async (req, res) => {
+      try {
+        const bookingId = req.params.id;
+
+        const booking = await Booking.findById(bookingId)
+          .populate("product");
+
+        if (!booking) {
+          return res.status(404).json({
+            success: false,
+            message: "Booking not found",
+          });
+        }
+
+        // ✅ Security check (same as order)
+        const isBuyer = booking.buyer.toString() === req.userId.toString();
+        const isSeller = booking.seller.toString() === req.userId.toString();
+
+        if (!isBuyer && !isSeller) {
+          return res.status(403).json({
+            success: false,
+            message: "Not authorized to view this booking",
+          });
+        }
+
+        res.json({
+          success: true,
+          booking,
+        });
+
+      } catch (err) {
+        console.error("🔥 Fetch Booking Error:", err);
+        res.status(500).json({
+          success: false,
+          message: "Server error while fetching booking",
+        });
+      }
+    });
+
+    app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req, res) => {
+
+      try {
+
+        const buyerId = req.userId;
+
+        const buyer = await Buyer.findById(buyerId);
+
+        if (!buyer) {
+          return res.json({ success: false });
+        }
+
+        buyer.name = req.body.name;
+
+        if (req.body.password) {
+          buyer.password = await bcrypt.hash(req.body.password, 10);
+        }
+
+        if (req.file) {
+          buyer.profile = req.file.path;
+        }
+
+        await buyer.save();
+
+        res.json({ success: true, buyer });
+
+      } catch (err) {
+        console.log(err);
+        res.json({ success: false });
+      }
+
+    });
+    app.delete("/api/cart/remove/:id", auth, async (req, res) => {
+      try {
+        const buyerId = req.userId;
+
+        const identifier = req.params.id;
+
+        const cart = await Cart.findOne({ buyer: buyerId });
+        if (!cart) {
+          return res.status(404).json({ success: false, message: "Cart not found" });
+        }
+
+        cart.items = cart.items.filter((item) => {
+          const isProductIdMatch =
+            item.product && item.product.toString() === identifier;
+
+          const isCartItemIdMatch =
+            item._id.toString() === identifier;
+
+          return !isProductIdMatch && !isCartItemIdMatch;
+        });
+
+        cart.totalPrice = cart.items.reduce(
+          (acc, item) => acc + item.price * item.quantity,
+          0
+        );
+
+        await cart.save();
+
+        res.json({
+          success: true,
+          message: "Item removed from cart",
+          cart
+        });
+
+      } catch (error) {
+        console.error("Remove from cart error:", error);
+        res.status(500).json({ success: false });
+      }
+    });
+
+    app.post("/api/seller/mark-activity-read", auth, async (req, res) => {
+      try {
+        const sellerId = req.userId;
+
+        if (!sellerId) {
+          return res.status(401).json({ success: false });
+        }
+
+        const seller = await Seller.findById(sellerId);
+
+        if (!seller) {
+          return res.json({ success: false });
+        }
+
+        if (seller.sellerType === "Service") {
+          // BOOKINGS
+          await Booking.updateMany(
+            { seller: sellerId, status: "Pending" },
+            { $set: { status: "Seen" } }
+          );
+        } else {
+          // ORDERS
+          await Order.updateMany(
+            { "items.seller": sellerId, status: "Pending" },
+            { $set: { seen: true } }
+          );
+        }
+
+        res.json({ success: true });
+
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ success: false });
+      }
+    });
+
+    app.post("/api/seller/view/:id", auth, async (req, res) => {
+      try {
+        const sellerId = req.params.id;
+        const buyerId = req.userId;
+
+        if (!buyerId) return res.json({ success: false, message: "Guest view" });
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const seller = await Seller.findById(sellerId);
+        if (!seller) return res.json({ success: false });
+
+        // Check if there is an entry for today's date
+        let todayEntry = seller.dailyViews.find(
+          (d) => new Date(d.date).getTime() === today.getTime()
+        );
+
+        if (!todayEntry) {
+          // First visitor of the day
+          seller.dailyViews.push({ date: today, buyers: [buyerId] });
+          seller.views += 1;
+        } else {
+          // Check if THIS buyer has already been counted today
+          const hasViewed = todayEntry.buyers.includes(buyerId);
+          if (!hasViewed) {
+            todayEntry.buyers.push(buyerId);
+            seller.views += 1;
+          } else {
+            // Already counted this buyer today - do nothing
+            return res.json({ success: true, message: "Already visited today" });
+          }
+        }
+
+        await seller.save();
+        const sellerKey = `Seller_${sellerId}`;
+        const sellerSocket = onlineUsers.get(sellerKey);
+
+        if (sellerSocket) {
+          const todayEntry = seller.dailyViews.find(
+            d => new Date(d.date).getTime() === today.getTime()
+          );
+
+          io.to(sellerSocket).emit("newView", {
+            totalViews: seller.views,
+            todayViews: todayEntry ? todayEntry.buyers.length : 0
+          });
+        }
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ success: false });
+      }
+    });
+
+    app.post("/api/logout", (req, res) => {
+      res.json({
+        success: true,
+        message: "Logged out successfully"
+      });
+    });
+    // START SERVER
+    // ==============================
+    const PORT = process.env.PORT;
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 Server is running on port ${PORT}`);
+    });
