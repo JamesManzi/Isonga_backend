@@ -778,21 +778,42 @@ app.get("/api/view_profile/:id", auth, async (req, res) => {
 app.get("/api/view_products/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
-    const seller = await Seller.findById(sellerId);
-    if (!seller) {
-      return res.json({ success: false, message: "Seller not found" });
+
+    // 1. INCREMENT VIEW COUNT
+    // We update the Seller model because the 'views' stat belongs to them
+    const updatedSeller = await Seller.findByIdAndUpdate(
+      sellerId,
+      { $inc: { views: 1 } },
+      { new: true }
+    );
+
+    if (!updatedSeller) {
+      return res.status(404).json({ success: false, message: "Seller not found" });
     }
+
+    // 2. FETCH PRODUCTS
     const products = await Product.find({ seller: sellerId });
+
+    // 3. EMIT REAL-TIME UPDATE TO SELLER
+    const sellerRoom = `Seller_${sellerId}`;
+    
+    // This sends the updated count to the Seller's dashboard immediately
+    io.to(sellerRoom).emit("viewUpdate", {
+      totalViews: updatedSeller.views,
+      timestamp: new Date()
+    });
+
     res.json({
       success: true,
-      seller,
+      seller: updatedSeller,
       products
-    })
+    });
+
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({ success: false, message: "View Products Server Error" });
+    console.error("View Products Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
   }
-})
+});
 
 app.get("/api/Service_Products/:id", auth, async (req, res) => {
   try {
