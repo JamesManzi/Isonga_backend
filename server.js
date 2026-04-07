@@ -1587,7 +1587,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     const buyerObjectId = new mongoose.Types.ObjectId(buyerId);
 
     const conversations = await Message.aggregate([
-      // 1. Get messages for this buyer
+      // 1. Get messages involving this buyer
       { $match: { 
           $or: [
             { sender: buyerObjectId, senderModel: "Buyer" },
@@ -1597,12 +1597,12 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
       },
       // 2. Sort by newest
       { $sort: { createdAt: -1 } },
-      // 3. Build the room ID (Must match socket delete logic)
+      // 3. Construct Room ID (Ensure this matches your Socket logic exactly!)
       {
         $addFields: {
           room: {
             $concat: [
-              "Buyer_", buyerId, // Using the string ID from auth
+              "Buyer_", { $toString: buyerObjectId },
               "__Seller_", 
               { $cond: [
                 { $eq: ["$senderModel", "Seller"] }, 
@@ -1616,7 +1616,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 4. JOIN with Conversation to check for deletedFor status
+      // 4. Join with Conversation collection
       {
         $lookup: {
           from: "conversations",
@@ -1627,16 +1627,19 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
       },
       { $unwind: { path: "$convStatus", preserveNullAndEmptyArrays: true } },
       
-      // 5. 🔥 THE CRITICAL FILTER: Hide if buyer ID is in the deletedFor array
+      // 5. 🔥 THE REFRESH FIX: 
+      // This filters out chats where the buyer's ID exists in 'deletedFor'
       {
         $match: {
           $expr: {
-            $not: { $in: [buyerObjectId, { $ifNull: ["$convStatus.deletedFor", []] }] }
+            $not: { 
+              $in: [buyerObjectId, { $ifNull: ["$convStatus.deletedFor", []] }] 
+            }
           }
         }
       },
 
-      // 6. Group by room
+      // 6. Group results by room
       {
         $group: {
           _id: "$room",
@@ -1653,7 +1656,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 7. Get Seller Info
+      // 7. Lookup Seller Profile
       {
         $lookup: {
           from: "sellers",
@@ -1663,6 +1666,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
       { $unwind: "$seller" },
+      // 8. Final Output
       {
         $project: {
           _id: 0,
@@ -1680,7 +1684,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
 
     res.json({ success: true, conversations });
   } catch (err) {
-    console.error("Buyer Fetch Error:", err);
+    console.error("Aggregation Error:", err);
     res.status(500).json({ success: false });
   }
 });
