@@ -1137,21 +1137,24 @@ io.on("connection", (socket) => {
   // =========================
   // USER ONLINE
   // =========================
-  socket.on("userOnline", ({ userModel }) => {
-
+ socket.on("userOnline", ({ userModel }) => {
   if (!socket.userId || !userModel) return;
 
-  const key = `${userModel}_${socket.userId}`;
+  const model =
+    userModel.charAt(0).toUpperCase() + userModel.slice(1).toLowerCase();
+
+  const key = `${model}_${socket.userId}`;
 
   if (!onlineUsers.has(key)) {
-  onlineUsers.set(key, new Set());
-}
+    onlineUsers.set(key, new Set());
+  }
 
-onlineUsers.get(key).add(socket.id);
+  onlineUsers.get(key).add(socket.id);
   socket.userKey = key;
 
-  socket.join(key); // ✅ IMPORTANT
+  socket.join(key);
 
+  console.log("USER ONLINE:", key);
 });
 
 
@@ -1252,7 +1255,10 @@ await Conversation.findOneAndUpdate(
     io.to(room).emit("receiveMessage", messageData);
 
     // 6. Emit notification to receiver
-    const receiverKey = `${receiverModel}_${receiver}`;
+    const normalize = (m) =>
+  m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+
+const receiverKey = `${normalize(receiverModel)}_${receiver}`;
     const receiverSockets = onlineUsers.get(receiverKey);
 
 if (receiverSockets) {
