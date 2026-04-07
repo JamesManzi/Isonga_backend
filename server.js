@@ -1363,19 +1363,15 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
 });
 
 const mongoose = require("mongoose");
-
 socket.on("deleteConversation", async ({ room }) => {
   try {
     const userId = socket.userId;
     if (!userId || !room) return;
 
-    // Use upsert: true to ensure the document exists so we can hide it
     await Conversation.findOneAndUpdate(
-      { room: room.trim() }, // trim to prevent space issues
-      { 
-        $addToSet: { deletedFor: new mongoose.Types.ObjectId(userId) } 
-      },
-      { upsert: true, new: true } 
+      { room: room }, 
+      { $addToSet: { deletedFor: new mongoose.Types.ObjectId(userId) } },
+      { upsert: true } // Crucial: creates the doc if it doesn't exist
     );
 
     socket.emit("conversationDeleted", { room });
@@ -1584,17 +1580,17 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     const buyerObjectId = new mongoose.Types.ObjectId(req.userId);
 
     const conversations = await Message.aggregate([
-      // 1. Get all messages for this buyer
-      { 
-        $match: { 
+      // 1. Get messages for this buyer
+      { $match: { 
           $or: [
             { sender: buyerObjectId, senderModel: "Buyer" },
             { receiver: buyerObjectId, receiverModel: "Buyer" }
           ]
         } 
       },
+      // 2. Sort by newest
       { $sort: { createdAt: -1 } },
-      // 2. Group by the 'room' field as it exists in the message document
+      // 3. Group by the room field found in the message
       {
         $group: {
           _id: "$room", 
@@ -1613,26 +1609,25 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           }
         }
       },
-      // 3. JOIN with Conversations
+      // 4. JOIN with Conversations to see if it's "deleted"
       {
         $lookup: {
           from: "conversations",
-          localField: "_id", // This is the room name from the message
+          localField: "_id", // This is the room name
           foreignField: "room",
-          as: "statusDoc"
+          as: "statusInfo"
         }
       },
-      { $unwind: { path: "$statusDoc", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$statusInfo", preserveNullAndEmptyArrays: true } },
 
-      // 4. 🔥 THE REFRESH FILTER
-      // If the buyerId is in the deletedFor array, REMOVE it from the results
+      // 5. 🔥 THE REFRESH FIX: Remove rooms where buyer is in deletedFor
       {
         $match: {
-          "statusDoc.deletedFor": { $ne: buyerObjectId }
+          "statusInfo.deletedFor": { $ne: buyerObjectId }
         }
       },
 
-      // 5. Get Seller Info
+      // 6. Get Seller Details
       {
         $lookup: {
           from: "sellers",
@@ -1642,7 +1637,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
       { $unwind: "$seller" },
-      // 6. Project
+      // 7. Final Format
       {
         $project: {
           _id: 0,
@@ -1660,7 +1655,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
 
     res.json({ success: true, conversations });
   } catch (err) {
-    console.error("Aggregation Error:", err);
+    console.error(err);
     res.status(500).json({ success: false });
   }
 });
