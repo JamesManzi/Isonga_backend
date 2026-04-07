@@ -1417,15 +1417,16 @@ app.get("/api/get_buyer/:id",auth, async (req, res) => {
   }
 });
 
-// GET all conversations for a seller
-app.get("/api/seller/conversations",auth, async (req, res) => {
+app.get("/api/seller/conversations", auth, async (req, res) => {
   try {
-    const sellerId =req.userId;
-    if (!sellerId) return res.status(401).json({ success: false });
+    const sellerId = req.userId;
+    if (!sellerId)
+      return res.status(401).json({ success: false });
 
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
     const conversations = await Message.aggregate([
+      // 1. get seller messages
       {
         $match: {
           $or: [
@@ -1434,7 +1435,10 @@ app.get("/api/seller/conversations",auth, async (req, res) => {
           ],
         },
       },
+
       { $sort: { createdAt: -1 } },
+
+      // 2. build room + buyerId
       {
         $addFields: {
           buyerId: {
@@ -1447,30 +1451,47 @@ app.get("/api/seller/conversations",auth, async (req, res) => {
           room: {
             $concat: [
               "Buyer_",
-              { $cond: [{ $eq: ["$senderModel", "Buyer"] }, { $toString: "$sender" }, { $toString: "$receiver" }] },
+              {
+                $cond: [
+                  { $eq: ["$senderModel", "Buyer"] },
+                  { $toString: "$sender" },
+                  { $toString: "$receiver" },
+                ],
+              },
               "__Seller_",
               sellerId,
             ],
           },
         },
       },
+
+      // 3. group conversations
       {
         $group: {
           _id: "$room",
           lastMessage: { $first: "$message" },
           updatedAt: { $first: "$createdAt" },
+
           unreadCount: {
             $sum: {
               $cond: [
-                { $and: [{ $eq: ["$receiver", sellerObjectId] }, { $eq: ["$read", false] }] },
+                {
+                  $and: [
+                    { $eq: ["$receiver", sellerObjectId] },
+                    { $eq: ["$read", false] },
+                  ],
+                },
                 1,
                 0,
               ],
             },
           },
+
           buyerId: { $first: "$buyerId" },
         },
       },
+
+      // 4. JOIN buyer info
       {
         $lookup: {
           from: "buyers",
@@ -1480,6 +1501,8 @@ app.get("/api/seller/conversations",auth, async (req, res) => {
         },
       },
       { $unwind: "$buyer" },
+
+      // 5. PROJECT fields
       {
         $project: {
           _id: 1,
@@ -1492,6 +1515,35 @@ app.get("/api/seller/conversations",auth, async (req, res) => {
           buyerProfile: "$buyer.profile",
         },
       },
+
+      // 6. 🚨 IMPORTANT: REMOVE DELETED ONES
+      {
+        $lookup: {
+          from: "conversations",
+          let: { roomId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$room", "$$roomId"] },
+                    { $in: [sellerObjectId, "$deletedFor"] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "deletedCheck",
+        },
+      },
+
+      {
+        $match: {
+          deletedCheck: { $eq: [] }, // only keep NOT deleted
+        },
+      },
+
+      // 7. sort final
       { $sort: { updatedAt: -1 } },
     ]);
 
@@ -1501,7 +1553,6 @@ app.get("/api/seller/conversations",auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
 // 1. GET messages for a specific room (Updated with Population)
 app.get("/api/messages/:room", async (req, res) => {
   try {
