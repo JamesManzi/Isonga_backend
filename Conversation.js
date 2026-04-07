@@ -23,21 +23,12 @@ const conversationSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-
-    // 👇 KEY FIX: per-user deletion
-    deletedFor: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        refPath: "deletedModel",
-      },
-    ],
-
-    deletedModel: {
-      type: String,
-      enum: ["Buyer", "Seller"],
-    },
+deletedFor: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
   },
-  { timestamps: true }
+],
+},{ timestamps: true }
 );
 
 module.exports = mongoose.model("Conversation", conversationSchema);

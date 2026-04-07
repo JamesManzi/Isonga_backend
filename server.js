@@ -1329,13 +1329,12 @@ socket.on("messagesRead", async ({ room }) => {
 socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
   try {
     const message = await Message.findById(messageId);
-
     if (!message) return;
 
     const userId = socket.userId;
 
     if (forEveryone) {
-      // Only sender can delete for everyone
+      // only sender can delete for everyone
       if (message.sender.toString() !== userId) return;
 
       await Message.findByIdAndUpdate(messageId, {
@@ -1344,11 +1343,11 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
         deletedForEveryone: true,
       });
     } else {
-      // Delete only for current user (SAFE FIX)
+      // delete for me only
       await Message.findByIdAndUpdate(messageId, {
-        $addToSet: { 
-  deletedFor: new mongoose.Types.ObjectId(userId) 
-}
+        $addToSet: {
+          deletedFor: new mongoose.Types.ObjectId(userId),
+        },
       });
     }
 
@@ -1364,7 +1363,6 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
 });
 
 const mongoose = require("mongoose");
-
 socket.on("deleteConversation", async ({ room }) => {
   try {
     const userId = socket.userId;
@@ -1376,13 +1374,17 @@ socket.on("deleteConversation", async ({ room }) => {
       { room },
       {
         $addToSet: {
-          deletedFor: new mongoose.Types.ObjectId(userId), // ✅ IMPORTANT
+          deletedFor: new mongoose.Types.ObjectId(userId),
         },
       },
       { upsert: true }
     );
 
-    io.to(socket.userKey).emit("conversationDeleted", { room });
+    // 🔥 IMPORTANT: broadcast to everyone in room
+    io.to(room).emit("conversationDeleted", {
+      room,
+      userId,
+    });
 
   } catch (err) {
     console.error("deleteConversation error:", err);
@@ -1658,7 +1660,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
       },
 
       // =========================
-      // 4. FILTER DELETED CHATS (FIXED)
+      // 4. FIXED DELETED FILTER (ONLY CHANGE)
       // =========================
       {
         $match: {
@@ -1758,67 +1760,6 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     });
   }
 });
-
-app.post("/api/rate_seller/:sellerId",auth, async (req, res) => {
-  try {
-    const { rating, comment } = req.body;
-    const sellerId = req.params.sellerId;
-
-    let existing = await Rating.findOne({
-      seller: sellerId,
-      buyer: req.userId
-    });
-
-    if (existing) {
-      existing.rating = rating;
-      existing.comment = comment;
-      await existing.save();
-    } else {
-      await Rating.create({
-        seller: sellerId,
-        buyer: req.userId,
-        rating,
-        comment
-      });
-    }
-
-    // Recalculate average rating
-    const ratings = await Rating.find({ seller: sellerId });
-    const avg = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-
-    await Seller.findByIdAndUpdate(sellerId, {
-      averageRating: avg,
-      numReviews: ratings.length
-    });
-
-    // ==========================================
-    // REAL-TIME EMIT LOGIC START
-    // ==========================================
-    const sellerKey = `Seller_${sellerId}`;
-    const sellerSocket = onlineUsers.get(sellerKey);
-
-    if (sellerSocket) {
-      io.to(sellerSocket).emit("sellerRatingUpdated", {
-        sellerId: sellerId,
-        averageRating: avg,
-        numReviews: ratings.length
-      });
-    }
-    // ==========================================
-    // REAL-TIME EMIT LOGIC END
-    // ==========================================
-
-    res.json({
-      success: true,
-      averageRating: avg,
-      numReviews: ratings.length
-    });
-  } catch (err) {
-    console.log(err);
-    res.json({ success: false });
-  }
-});
-
 // GET all sellers for public home
 app.get("/api/home_sellers", async (req, res) => {
   try {
