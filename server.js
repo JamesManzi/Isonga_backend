@@ -1363,18 +1363,34 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
 });
 
 const mongoose = require("mongoose");
+
 socket.on("deleteConversation", async ({ room }) => {
   try {
     const userId = socket.userId;
     if (!userId || !room) return;
 
-    await Conversation.findOneAndUpdate(
-      { room: room }, 
-      { $addToSet: { deletedFor: new mongoose.Types.ObjectId(userId) } },
-      { upsert: true } // Crucial: creates the doc if it doesn't exist
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const updated = await Conversation.findOneAndUpdate(
+      { room },
+      {
+        $addToSet: { deletedFor: userObjectId }
+      },
+      {
+        upsert: true,
+        new: true
+      }
     );
 
-    socket.emit("conversationDeleted", { room });
+    // IMPORTANT: notify ALL connected clients in that room
+    io.to(room).emit("conversationDeleted", {
+      room,
+      userId
+    });
+
+    // optional: confirm back to sender
+    socket.emit("deleteConversationSuccess", { room });
+
   } catch (err) {
     console.error("Socket Delete Error:", err);
   }
@@ -1580,54 +1596,87 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     const buyerObjectId = new mongoose.Types.ObjectId(req.userId);
 
     const conversations = await Message.aggregate([
-      // 1. Get messages for this buyer
-      { $match: { 
+      // 1. Get only messages related to this buyer
+      {
+        $match: {
           $or: [
             { sender: buyerObjectId, senderModel: "Buyer" },
             { receiver: buyerObjectId, receiverModel: "Buyer" }
           ]
-        } 
+        }
       },
-      // 2. Sort by newest
+
+      // 2. Sort newest first
       { $sort: { createdAt: -1 } },
-      // 3. Group by the room field found in the message
+
+      // 3. Group by room
       {
         $group: {
-          _id: "$room", 
+          _id: "$room",
           lastMessage: { $first: "$message" },
           updatedAt: { $first: "$createdAt" },
+
           sellerId: {
-            $first: { $cond: [{ $eq: ["$senderModel", "Seller"] }, "$sender", "$receiver"] }
+            $first: {
+              $cond: [
+                { $eq: ["$senderModel", "Seller"] },
+                "$sender",
+                "$receiver"
+              ]
+            }
           },
+
           unreadCount: {
             $sum: {
               $cond: [
-                { $and: [{ $eq: ["$receiver", buyerObjectId] }, { $eq: ["$read", false] }] },
-                1, 0
+                {
+                  $and: [
+                    { $eq: ["$receiver", buyerObjectId] },
+                    { $eq: ["$read", false] }
+                  ]
+                },
+                1,
+                0
               ]
             }
           }
         }
       },
-      // 4. JOIN with Conversations to see if it's "deleted"
+
+      // 4. Join conversation collection (soft delete tracking)
       {
         $lookup: {
           from: "conversations",
-          localField: "_id", // This is the room name
+          localField: "_id",
           foreignField: "room",
           as: "statusInfo"
         }
       },
-      { $unwind: { path: "$statusInfo", preserveNullAndEmptyArrays: true } },
 
-      // 5. 🔥 THE REFRESH FIX: Remove rooms where buyer is in deletedFor
+      // 5. Normalize missing conversation docs
       {
-        $match: {
-          "statusInfo.deletedFor": { $ne: buyerObjectId }
+        $addFields: {
+          statusInfo: {
+            $arrayElemAt: ["$statusInfo", 0]
+          }
         }
       },
 
-      // 6. Get Seller Details
+      // 6. 🚀 FIX: properly filter deleted conversations
+      {
+        $match: {
+          $or: [
+            { statusInfo: { $eq: null } },
+            {
+              "statusInfo.deletedFor": {
+                $not: { $in: [buyerObjectId] }
+              }
+            }
+          ]
+        }
+      },
+
+      // 7. Get seller details
       {
         $lookup: {
           from: "sellers",
@@ -1636,8 +1685,10 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           as: "seller"
         }
       },
+
       { $unwind: "$seller" },
-      // 7. Final Format
+
+      // 8. Final response shape
       {
         $project: {
           _id: 0,
@@ -1647,46 +1698,18 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           unreadCount: 1,
           sellerId: 1,
           sellerName: "$seller.name",
-          sellerProfile: "$seller.profile",
+          sellerProfile: "$seller.profile"
         }
       },
+
+      // 9. Final sort
       { $sort: { updatedAt: -1 } }
     ]);
 
     res.json({ success: true, conversations });
   } catch (err) {
-    console.error(err);
+    console.error("Conversation fetch error:", err);
     res.status(500).json({ success: false });
-  }
-});
-// GET all sellers for public home
-app.get("/api/home_sellers", async (req, res) => {
-  try {
-    const sellers = await Seller.find().select(
-      "name location category profile files description"
-    );
-
-    // Add ratings info for each seller
-    const sellersWithRatings = await Promise.all(
-      sellers.map(async (seller) => {
-        const ratings = await Rating.find({ seller: seller._id });
-        const averageRating = ratings.length
-          ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
-          : 0;
-        const numReviews = ratings.length;
-
-        return {
-          ...seller.toObject(),
-          averageRating,
-          numReviews,
-        };
-      })
-    );
-
-    res.json({ success: true, sellers: sellersWithRatings });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false, message: "Error fetching sellers" });
   }
 });
 
