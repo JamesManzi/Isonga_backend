@@ -2227,52 +2227,42 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
         res.status(500).json({ success: false });
       }
     });
+app.post("/api/rate_seller", auth, async (req, res) => {
+  try {
+    const { sellerId, rating, comment } = req.body;
+    const buyerId = req.userId;
 
-    app.post("/api/rate_seller", auth, async (req, res) => {
-      try {
-        const { sellerId, rating, comment } = req.body;
-        const buyerId = req.userId;
+    if (!buyerId) return res.json({ success: false, message: "Login required" });
 
-        if (!buyerId) return res.json({ success: false, message: "Login required" });
-
-        // 1. Save the rating
-        const newRating = await Rating.create({
-          buyer: buyerId,
-          seller: sellerId,
-          rating: Number(rating),
-          comment
-        });
-
-        // 2. RE-CALCULATE (To send fresh data to the dashboard)
-        const ratings = await Rating.find({ seller: sellerId });
-        const numReviews = ratings.length;
-        const averageRating = ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews;
-
-        // 3. SOCKET EMISSION (Real-time update)
-        const sellerKey = `Seller_${sellerId}`;
-        const sellerSocketId = onlineUsers.get(sellerKey);
-
-        if (sellerSocketId) {
-          io.to(sellerSocketId).emit("sellerRatingUpdated", {
-            averageRating: Number(averageRating.toFixed(1)),
-            numReviews: numReviews
-          });
-        }
-
-        res.json({ success: true, message: "Rating submitted!" });
-      } catch (error) {
-        res.status(500).json({ success: false });
-      }
+    // 1. Save the rating
+    const newRating = await Rating.create({
+      buyer: buyerId,
+      seller: sellerId,
+      rating: Number(rating),
+      comment
     });
 
-    app.get("/test-db", async (req, res) => {
-      try {
-        const collections = await mongoose.connection.db.listCollections().toArray();
-        res.send({ status: "OK", collections });
-      } catch (err) {
-        res.status(500).send({ status: "ERROR", message: err.message });
-      }
+    // 2. RE-CALCULATE
+    const ratings = await Rating.find({ seller: sellerId });
+    const numReviews = ratings.length;
+    const averageRating = ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews;
+
+    // 3. SOCKET EMISSION (Using Rooms instead of Socket ID)
+    const sellerRoom = `Seller_${sellerId}`;
+    
+    // This will update the stats on the seller's dashboard in real-time
+    io.to(sellerRoom).emit("sellerRatingUpdated", {
+      averageRating: Number(averageRating.toFixed(1)),
+      numReviews: numReviews,
+      message: "Someone just left you a review!" 
     });
+
+    res.json({ success: true, message: "Rating submitted!" });
+  } catch (error) {
+    console.error("Rating Error:", error);
+    res.status(500).json({ success: false });
+  }
+});
 
     app.get("/api/buyer_profile", auth, async (req, res) => {
       try {
