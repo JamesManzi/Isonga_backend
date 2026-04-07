@@ -1994,29 +1994,25 @@ app.post("/api/order",auth, upload.single("paymentProof"), async (req, res) => {
       status: "Pending"
     });
 
-    // Notify involved sellers via Socket.io
+   // Notify involved sellers via Socket.io
     const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
+    
     uniqueSellers.forEach(sellerId => {
-      const sellerKey = `Seller_${sellerId}`;
-      const sellerSocketId = onlineUsers.get(sellerKey);
-      if (sellerSocketId) {
-        io.to(sellerSocketId).emit("newOrderNotification", {
-          message: `New Order from ${name}!`,
-          orderId: newOrder._id,
-          total: cart.totalPrice
-        });
-      }
-    });
+      const sellerRoom = `Seller_${sellerId}`; 
+
+      // Use io.to(sellerRoom) to hit the room, not a specific ID
+      // If 'io' is defined in your main server file, ensure it's accessible here
+      io.to(sellerRoom).emit("newOrderNotification", {
+        message: `New Order from ${name}!`,
+        orderId: newOrder._id,
+        total: cart.totalPrice
+      });
+    }); // <--- YOU WERE MISSING THIS CLOSING BRACE AND PARENTHESIS
 
     // Clear the cart after successful order
     await Cart.findOneAndDelete({ buyer: buyerId });
 
     res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
-  } catch (error) {
-    console.error("Order Creation Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
 
 // 2. GET SELLER ORDERS
 app.get("/api/seller/orders",auth, async (req, res) => {
@@ -2102,23 +2098,18 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
     });
 
     const buyerKey = `Buyer_${item.buyer}`;
-    const buyerSocket = onlineUsers.get(buyerKey);
+   // ✅ NEW WAY
+const buyerRoom = `Buyer_${item.buyer}`;
 
-    if (buyerSocket) {
-      const unreadCount = await Notification.countDocuments({
-        recipient: item.buyer,
-        read: false
-      });
-
-      io.to(buyerSocket).emit("new_notification", {
-        _id: newNotif._id,
-        message: notificationMessage,
-        unreadCount,
-        orderId: item._id,
-        status,
-        createdAt: newNotif.createdAt
-      });
-    }
+io.to(buyerRoom).emit("new_notification", {
+  _id: newNotif._id,
+  message: notificationMessage,
+  unreadCount, // Ensure you calculate this as you did before
+  orderId: item._id,
+  status,
+  createdAt: newNotif.createdAt
+});
+    
 
     res.json({
       success: true,
