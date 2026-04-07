@@ -1199,7 +1199,20 @@ await Conversation.updateOne(
   { upsert: true }
 );
 
-
+// ✅ FIX: restore deleted conversations when new message arrives
+await Conversation.findOneAndUpdate(
+  { room },
+  {
+    $pull: {
+      deletedFor: {
+        $in: [
+          new mongoose.Types.ObjectId(sender),
+          new mongoose.Types.ObjectId(receiver),
+        ],
+      },
+    },
+  }
+);
     // 2. Save message with the new fields
     const newMessage = await Message.create({
       sender,
