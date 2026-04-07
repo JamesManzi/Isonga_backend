@@ -1365,29 +1365,22 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
 const mongoose = require("mongoose");
 socket.on("deleteConversation", async ({ room }) => {
   try {
-    const userId = socket.userId;
+    const userId = socket.userId; // Ensure this is attached on connection
     if (!userId || !room) return;
 
-    const Conversation = require("./models/Conversation");
-
+    // Use $addToSet to add the user to the "hidden" list
     await Conversation.findOneAndUpdate(
-      { room },
-      {
-        $addToSet: {
-          deletedFor: new mongoose.Types.ObjectId(userId),
-        },
-      },
-      { upsert: true }
+      { room: room },
+      { 
+        $addToSet: { deletedFor: new mongoose.Types.ObjectId(userId) } 
+      }
     );
 
-    // 🔥 IMPORTANT: broadcast to everyone in room
-    io.to(room).emit("conversationDeleted", {
-      room,
-      userId,
-    });
-
+    // Confirm to the user
+    socket.emit("conversationDeleted", { room });
+    
   } catch (err) {
-    console.error("deleteConversation error:", err);
+    console.error("Socket Delete Error:", err);
   }
 });
   // =========================
@@ -1589,175 +1582,55 @@ app.get("/api/get_seller/:id",auth, async (req, res) => {
 app.get("/api/buyer/conversations", auth, async (req, res) => {
   try {
     const buyerId = req.userId;
-
     if (!buyerId) {
-      return res.status(401).json({
-        success: false,
-        message: "Buyer not logged in",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const buyerObjectId = new mongoose.Types.ObjectId(buyerId);
 
-    const conversations = await Message.aggregate([
-      // =========================
-      // 1. MATCH BUYER MESSAGES
-      // =========================
+    const conversations = await Conversation.aggregate([
+      // 1. Find conversations where the user is the buyer
+      // AND where the user HAS NOT deleted the conversation
       {
         $match: {
-          $or: [
-            { sender: buyerObjectId, senderModel: "Buyer" },
-            { receiver: buyerObjectId, receiverModel: "Buyer" },
-          ],
-        },
+          buyerId: buyerObjectId,
+          deletedFor: { $ne: buyerObjectId } 
+        }
       },
 
-      // =========================
-      // 2. BUILD ROOM + SELLER ID
-      // =========================
-      {
-        $addFields: {
-          sellerId: {
-            $cond: [
-              { $eq: ["$senderModel", "Seller"] },
-              "$sender",
-              "$receiver",
-            ],
-          },
-          room: {
-            $concat: [
-              "Buyer_",
-              buyerId,
-              "__Seller_",
-              {
-                $cond: [
-                  { $eq: ["$senderModel", "Seller"] },
-                  { $toString: "$sender" },
-                  { $toString: "$receiver" },
-                ],
-              },
-            ],
-          },
-        },
-      },
-
-      // =========================
-      // 3. LOOKUP CONVERSATION
-      // =========================
+      // 2. Lookup Seller details
       {
         $lookup: {
-          from: "conversations",
-          localField: "room",
-          foreignField: "room",
-          as: "conversation",
-        },
-      },
-      {
-        $unwind: {
-          path: "$conversation",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      // =========================
-      // 4. FIXED DELETED FILTER (ONLY CHANGE)
-      // =========================
-      {
-        $match: {
-          $or: [
-            { conversation: null },
-            {
-              $expr: {
-                $not: {
-                  $in: [
-                    buyerObjectId,
-                    { $ifNull: ["$conversation.deletedFor", []] },
-                  ],
-                },
-              },
-            },
-          ],
-        },
-      },
-
-      // =========================
-      // 5. SORT LATEST FIRST
-      // =========================
-      { $sort: { createdAt: -1 } },
-
-      // =========================
-      // 6. GROUP CONVERSATIONS
-      // =========================
-      {
-        $group: {
-          _id: "$room",
-          lastMessage: { $first: "$message" },
-          updatedAt: { $first: "$createdAt" },
-          unreadCount: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $eq: ["$receiver", buyerObjectId] },
-                    { $eq: ["$read", false] },
-                  ],
-                },
-                1,
-                0,
-              ],
-            },
-          },
-          sellerId: { $first: "$sellerId" },
-        },
-      },
-
-      // =========================
-      // 7. GET SELLER INFO
-      // =========================
-      {
-        $lookup: {
-          from: "sellers",
+          from: "sellers", 
           localField: "sellerId",
           foreignField: "_id",
-          as: "seller",
-        },
+          as: "sellerInfo"
+        }
       },
-      {
-        $unwind: "$seller",
-      },
+      { $unwind: "$sellerInfo" },
 
-      // =========================
-      // 8. FINAL FORMAT
-      // =========================
+      // 3. Final Format (Mapping to your frontend needs)
       {
         $project: {
           _id: 0,
-          room: "$_id",
+          room: 1,
           lastMessage: 1,
           updatedAt: 1,
           unreadCount: 1,
           sellerId: 1,
-          sellerName: "$seller.name",
-          sellerProfile: "$seller.profile",
-        },
+          sellerName: "$sellerInfo.name",
+          sellerProfile: "$sellerInfo.profile",
+        }
       },
 
-      // =========================
-      // 9. FINAL SORT
-      // =========================
-      { $sort: { updatedAt: -1 } },
+      // 4. Sort by latest activity
+      { $sort: { updatedAt: -1 } }
     ]);
 
-    res.json({
-      success: true,
-      conversations,
-    });
+    res.json({ success: true, conversations });
   } catch (err) {
-    console.error("Buyer Conversations Error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    console.error("Fetch Conversations Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 // GET all sellers for public home
