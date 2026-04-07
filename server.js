@@ -1185,6 +1185,20 @@ socket.on("sendMessage", async (data) => {
         ? `Buyer_${sender}__Seller_${receiver}`
         : `Buyer_${receiver}__Seller_${sender}`;
 
+        const Conversation = require("./models/Conversation");
+
+await Conversation.updateOne(
+  { room },
+  {
+    $setOnInsert: {
+      room,
+      participants: [sender, receiver],
+    },
+  },
+  { upsert: true }
+);
+
+
     // 2. Save message with the new fields
     const newMessage = await Message.create({
       sender,
@@ -1569,38 +1583,44 @@ app.get("/api/get_seller/:id",auth, async (req, res) => {
   res.json({ success: true, seller });
 });
 
-app.get("/api/buyer/conversations",auth, async (req, res) => {
+app.get("/api/buyer/conversations", auth, async (req, res) => {
   try {
     const buyerId = req.userId;
 
     if (!buyerId) {
-      return res.status(401).json({ success: false, message: "Buyer not logged in" });
+      return res.status(401).json({
+        success: false,
+        message: "Buyer not logged in",
+      });
     }
 
     const buyerObjectId = new mongoose.Types.ObjectId(buyerId);
 
     const conversations = await Message.aggregate([
+      // =========================
+      // 1. MATCH BUYER MESSAGES
+      // =========================
       {
-        // Only messages involving this buyer
         $match: {
           $or: [
             { sender: buyerObjectId, senderModel: "Buyer" },
-            { receiver: buyerObjectId, receiverModel: "Buyer" }
-          ]
-        }
+            { receiver: buyerObjectId, receiverModel: "Buyer" },
+          ],
+        },
       },
-      { $sort: { createdAt: -1 } },
+
+      // =========================
+      // 2. BUILD ROOM + SELLER ID EARLY
+      // =========================
       {
         $addFields: {
-          // Determine sellerId consistently
           sellerId: {
             $cond: [
               { $eq: ["$senderModel", "Seller"] },
               "$sender",
-              "$receiver"
-            ]
+              "$receiver",
+            ],
           },
-          // Room always Buyer_<buyerId>__Seller_<sellerId>
           room: {
             $concat: [
               "Buyer_",
@@ -1610,58 +1630,120 @@ app.get("/api/buyer/conversations",auth, async (req, res) => {
                 $cond: [
                   { $eq: ["$senderModel", "Seller"] },
                   { $toString: "$sender" },
-                  { $toString: "$receiver" }
-                ]
-              }
-            ]
-          }
-        }
+                  { $toString: "$receiver" },
+                ],
+              },
+            ],
+          },
+        },
+      },
+
+      // =========================
+      // 3. LOOKUP CONVERSATION
+      // =========================
+      {
+        $lookup: {
+          from: "conversations",
+          localField: "room",
+          foreignField: "room",
+          as: "conversation",
+        },
       },
       {
+        $unwind: {
+          path: "$conversation",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // =========================
+      // 4. FILTER DELETED CHATS
+      // =========================
+      {
+        $match: {
+          $or: [
+            { "conversation.deletedFor": { $exists: false } },
+            { "conversation.deletedFor": { $ne: buyerObjectId } },
+          ],
+        },
+      },
+
+      // =========================
+      // 5. SORT (LATEST FIRST)
+      // =========================
+      { $sort: { createdAt: -1 } },
+
+      // =========================
+      // 6. GROUP INTO CONVERSATIONS
+      // =========================
+      {
         $group: {
-          _id: "$room", // use directional room string
+          _id: "$room",
           lastMessage: { $first: "$message" },
           updatedAt: { $first: "$createdAt" },
           unreadCount: {
             $sum: {
               $cond: [
-                { $and: [{ $eq: ["$receiver", buyerObjectId] }, { $eq: ["$read", false] }] },
+                {
+                  $and: [
+                    { $eq: ["$receiver", buyerObjectId] },
+                    { $eq: ["$read", false] },
+                  ],
+                },
                 1,
-                0
-              ]
-            }
+                0,
+              ],
+            },
           },
-          sellerId: { $first: "$sellerId" }
-        }
+          sellerId: { $first: "$sellerId" },
+        },
       },
+
+      // =========================
+      // 7. GET SELLER INFO
+      // =========================
       {
         $lookup: {
           from: "sellers",
           localField: "sellerId",
           foreignField: "_id",
-          as: "seller"
-        }
+          as: "seller",
+        },
       },
       { $unwind: "$seller" },
+
+      // =========================
+      // 8. FINAL FORMAT
+      // =========================
       {
         $project: {
-          _id: 1,
+          _id: 0,
           room: "$_id",
           lastMessage: 1,
           updatedAt: 1,
           unreadCount: 1,
           sellerId: 1,
           sellerName: "$seller.name",
-          sellerProfile: "$seller.profile"
-        }
+          sellerProfile: "$seller.profile",
+        },
       },
-      { $sort: { updatedAt: -1 } }
+
+      // =========================
+      // 9. FINAL SORT
+      // =========================
+      { $sort: { updatedAt: -1 } },
     ]);
 
-    res.json({ success: true, conversations });
+    res.json({
+      success: true,
+      conversations,
+    });
   } catch (err) {
     console.error("Buyer Conversations Error:", err);
-    res.status(500).json({ success: false });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 
