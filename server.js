@@ -1157,27 +1157,33 @@ io.on("connection", (socket) => {
 
   // =========================
   // USER ONLINE
-  // =========================
-  socket.on("userOnline", ({ userModel }) => {
-    if (!socket.userId || !userModel) return;
+  // ==================
+  // BACKEND: updated userOnline listener
+socket.on("userOnline", (data) => {
+  // 1. Get the ID and Model from the data sent by the Frontend
+  const { userId, userModel } = data;
 
-    const model =
-      userModel.charAt(0).toUpperCase() + userModel.slice(1).toLowerCase();
+  if (!userId || !userModel) return;
 
-    const key = `${model}_${socket.userId}`;
+  // 2. Format the model (e.g., "seller" -> "Seller")
+  const model = userModel.charAt(0).toUpperCase() + userModel.slice(1).toLowerCase();
 
-    if (!onlineUsers.has(key)) {
-      onlineUsers.set(key, new Set());
-    }
+  // 3. Create the key (e.g., "Seller_65eb...")
+  const key = `${model}_${userId}`;
 
-    onlineUsers.get(key).add(socket.id);
-    socket.userKey = key;
+  // 4. Register in your onlineUsers Map
+  if (!onlineUsers.has(key)) {
+    onlineUsers.set(key, new Set());
+  }
+  onlineUsers.get(key).add(socket.id);
+  
+  socket.userKey = key;
 
-    socket.join(key);
+  // 5. JOIN THE ROOM (Critical for io.to(key).emit to work)
+  socket.join(key);
 
-    console.log("USER ONLINE:", key);
-  });
-
+  console.log("✅ LIVE DASHBOARD ACTIVE:", key);
+});
 
   // =========================
   // JOIN CHAT ROOM
