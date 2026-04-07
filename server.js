@@ -1346,7 +1346,9 @@ socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
     } else {
       // Delete only for current user (SAFE FIX)
       await Message.findByIdAndUpdate(messageId, {
-        $addToSet: { deletedFor: userId },
+        $addToSet: { 
+  deletedFor: new mongoose.Types.ObjectId(userId) 
+}
       });
     }
 
@@ -1609,7 +1611,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
       },
 
       // =========================
-      // 2. BUILD ROOM + SELLER ID EARLY
+      // 2. BUILD ROOM + SELLER ID
       // =========================
       {
         $addFields: {
@@ -1656,24 +1658,33 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
       },
 
       // =========================
-      // 4. FILTER DELETED CHATS
+      // 4. FILTER DELETED CHATS (FIXED)
       // =========================
       {
         $match: {
           $or: [
-            { "conversation.deletedFor": { $exists: false } },
-            { "conversation.deletedFor": { $ne: buyerObjectId } },
+            { conversation: null },
+            {
+              $expr: {
+                $not: {
+                  $in: [
+                    buyerObjectId,
+                    { $ifNull: ["$conversation.deletedFor", []] },
+                  ],
+                },
+              },
+            },
           ],
         },
       },
 
       // =========================
-      // 5. SORT (LATEST FIRST)
+      // 5. SORT LATEST FIRST
       // =========================
       { $sort: { createdAt: -1 } },
 
       // =========================
-      // 6. GROUP INTO CONVERSATIONS
+      // 6. GROUP CONVERSATIONS
       // =========================
       {
         $group: {
@@ -1709,7 +1720,9 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           as: "seller",
         },
       },
-      { $unwind: "$seller" },
+      {
+        $unwind: "$seller",
+      },
 
       // =========================
       // 8. FINAL FORMAT
