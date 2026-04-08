@@ -1672,7 +1672,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     const buyerObjectId = new mongoose.Types.ObjectId(req.userId);
 
     const conversations = await Message.aggregate([
-      // 1. Get only messages related to buyer
+      // 1. Get messages where the buyer is involved
       {
         $match: {
           $or: [
@@ -1684,13 +1684,13 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
 
       { $sort: { createdAt: -1 } },
 
-      // 2. Group messages into conversations
+      // 2. Group into conversations and identify the Seller
       {
         $group: {
           _id: "$room",
           lastMessage: { $first: "$message" },
           updatedAt: { $first: "$createdAt" },
-
+          // If the sender wasn't a Seller, the receiver must be
           sellerId: {
             $first: {
               $cond: [
@@ -1700,7 +1700,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
               ]
             }
           },
-
+          // Count messages sent TO this buyer that are unread
           unreadCount: {
             $sum: {
               $cond: [
@@ -1718,7 +1718,7 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
 
-      // 3. Join conversation table
+      // 3. Check for soft-deletion status
       {
         $lookup: {
           from: "conversations",
@@ -1727,31 +1727,27 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           as: "conv"
         }
       },
-
-      // 4. flatten safely
       {
         $addFields: {
           conv: { $arrayElemAt: ["$conv", 0] }
         }
       },
 
-      // 5. 🔥 STRONG DELETE FILTER (FIX)
+      // 4. Filter out conversations the buyer has deleted
       {
         $match: {
           $expr: {
             $not: {
               $in: [
                 buyerObjectId,
-                {
-                  $ifNull: ["$conv.deletedFor", []]
-                }
+                { $ifNull: ["$conv.deletedFor", []] }
               ]
             }
           }
         }
       },
 
-      // 6. seller lookup
+      // 5. Lookup Seller details (Name & Profile)
       {
         $lookup: {
           from: "sellers",
@@ -1761,9 +1757,11 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
         }
       },
 
-      { $unwind: "$seller" },
+      // Use preserveNullAndEmptyArrays so the chat doesn't disappear 
+      // if the seller profile is bugged
+      { $unwind: { path: "$seller", preserveNullAndEmptyArrays: true } },
 
-      // 7. final shape
+      // 6. Final shape (Adding roomUnreadCount for Real-time compatibility)
       {
         $project: {
           _id: 0,
@@ -1771,9 +1769,10 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
           lastMessage: 1,
           updatedAt: 1,
           unreadCount: 1,
+          roomUnreadCount: "$unreadCount", // 🔥 CRITICAL: Match the socket emit key
           sellerId: 1,
-          sellerName: "$seller.name",
-          sellerProfile: "$seller.profile"
+          sellerName: { $ifNull: ["$seller.name", "Unknown Seller"] },
+          sellerProfile: { $ifNull: ["$seller.profile", ""] }
         }
       },
 
@@ -1783,11 +1782,10 @@ app.get("/api/buyer/conversations", auth, async (req, res) => {
     res.json({ success: true, conversations });
 
   } catch (err) {
-    console.error("Conversation fetch error:", err);
+    console.error("Buyer Conversation fetch error:", err);
     res.status(500).json({ success: false });
   }
 });
-
 
 // GET all sellers for public home
 app.get("/api/home_sellers", async (req, res) => {
