@@ -2254,43 +2254,54 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
         res.status(500).json({ success: false });
       }
     });
-app.post("/api/rate_seller", auth, async (req, res) => {
+    app.post("/api/rate_seller", auth, async (req, res) => {
   try {
     const { sellerId, rating, comment } = req.body;
     const buyerId = req.userId;
 
     if (!buyerId) return res.json({ success: false, message: "Login required" });
 
-    // 1. Save the rating
-    const newRating = await Rating.create({
-      buyer: buyerId,
-      seller: sellerId,
-      rating: Number(rating),
-      comment
-    });
+    // 1. UPSERT: Find existing rating by this buyer for this seller, or create new
+    await Rating.findOneAndUpdate(
+      { buyer: buyerId, seller: sellerId }, // Search criteria
+      { 
+        rating: Number(rating), 
+        comment, 
+        createdAt: Date.now() 
+      }, // Data to update
+      { upsert: true, new: true } // Create if doesn't exist
+    );
 
-    // 2. RE-CALCULATE
+    // 2. RE-CALCULATE Stats
     const ratings = await Rating.find({ seller: sellerId });
     const numReviews = ratings.length;
-    const averageRating = ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews;
+    const totalRatingSum = ratings.reduce((sum, r) => sum + r.rating, 0);
+    const averageRating = totalRatingSum / numReviews;
 
-    // 3. SOCKET EMISSION (Using Rooms instead of Socket ID)
+    // 3. BROADCAST TO ROOM
+    // Using the "Room" ensures every open tab (Seller Dashboard & Buyer View) 
+    // listening to this seller ID gets the update instantly.
     const sellerRoom = `Seller_${sellerId}`;
     
-    // This will update the stats on the seller's dashboard in real-time
     io.to(sellerRoom).emit("sellerRatingUpdated", {
+      sellerId: sellerId, // Include ID so frontend can verify
       averageRating: Number(averageRating.toFixed(1)),
       numReviews: numReviews,
-      message: "Someone just left you a review!" 
+      message: "Rating updated!" 
     });
 
-    res.json({ success: true, message: "Rating submitted!" });
+    res.json({ 
+      success: true, 
+      message: "Rating submitted!",
+      averageRating: Number(averageRating.toFixed(1)),
+      numReviews 
+    });
+
   } catch (error) {
     console.error("Rating Error:", error);
     res.status(500).json({ success: false });
   }
 });
-
     app.get("/api/buyer_profile", auth, async (req, res) => {
       try {
 
