@@ -1200,10 +1200,12 @@ socket.on("userOnline", (data) => {
     console.log(`Socket ${socket.id} joined room: ${room}`);
   });
 
+  // ====
+  // =========================
+  // SEND MESSAGE (UPDATED FOR REAL-TIME NOTIFS)
   // =========================
   socket.on("sendMessage", async (data) => {
     try {
-      // 1. Extract the new fields (productId and replyTo) from data
       const {
         sender, senderModel, receiver, receiverModel,
         message, files, productId, replyTo
@@ -1229,7 +1231,7 @@ socket.on("userOnline", (data) => {
         { upsert: true }
       );
 
-      // ✅ FIX: restore deleted conversations when new message arrives
+      // Restore deleted conversations
       await Conversation.findOneAndUpdate(
         { room },
         {
@@ -1243,7 +1245,8 @@ socket.on("userOnline", (data) => {
           },
         }
       );
-      // 2. Save message with the new fields
+
+      // 1. Save message
       const newMessage = await Message.create({
         sender,
         senderModel,
@@ -1252,63 +1255,64 @@ socket.on("userOnline", (data) => {
         message: message || "",
         files: files || [],
         room,
-        productId: productId || null, // Saves the product being discussed
-        replyTo: replyTo || null,     // Saves the ID of the message being replied to
+        productId: productId || null,
+        replyTo: replyTo || null,
         read: false
       });
-      // 3. IMPORTANT: Populate the replyTo and productId fields 
-      // This ensures the receiver gets the actual TEXT of the reply, not just an ID.
+
+      // 2. Populate for the quote/product box
       const populatedMessage = await Message.findById(newMessage._id)
         .populate({
           path: "replyTo",
-          select: "message files sender senderModel" // Only get what's needed for the quote box
+          select: "message files sender senderModel"
         })
-        .populate("productId", "name price files"); // Get product details for the tag
+        .populate("productId", "name price files");
 
-      // 4. Count unread messages
-      const unreadCount = await Message.countDocuments({
+      // 3. Count unread messages for THIS ROOM (for the chat screen)
+      const roomUnreadCount = await Message.countDocuments({
         room,
         receiver,
-        receiverModel,
+        read: false
+      });
+
+      // 4. 🔥 NEW: Count TOTAL unread messages for THIS USER (for the dashboard bubble)
+      const totalUnreadMessages = await Message.countDocuments({
+        receiver,
         read: false
       });
 
       const messageData = {
         ...populatedMessage.toObject(),
-        unreadCount
+        unreadCount: roomUnreadCount
       };
 
-      // 5. Emit the FULL populated message to the room
+      // 5. Emit to the active chat room
       io.to(room).emit("receiveMessage", messageData);
 
-      // 6. Emit notification to receiver
+      // 6. Emit to the Receiver's Dashboard (Real-time Notification)
       const normalize = (m) =>
         m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
 
       const receiverKey = `${normalize(receiverModel)}_${receiver}`;
-      const receiverSockets = onlineUsers.get(receiverKey);
-
-      if (receiverSockets) {
-        receiverSockets.forEach(socketId => {
-          io.to(socketId).emit("newMessageNotification", {
-            room,
-            sender,
-            senderModel,
-            receiver,
-            receiverModel,
-            message,
-            unreadCount,
-            replyTo: messageData.replyTo,
-            createdAt: newMessage.createdAt
-          });
-        });
-      }
+      
+      // ✅ TARGET THE ROOM (More reliable than onlineUsers Map)
+      // Since your userOnline logic joins socket.join(key), we can emit directly to the room
+      io.to(receiverKey).emit("newMessageNotification", {
+        room,
+        sender,
+        senderModel,
+        receiver,
+        receiverModel,
+        message: message || "Sent an attachment",
+        unreadChatCount: totalUnreadMessages, // 🔥 PASSING THE TOTAL COUNT HERE
+        replyTo: messageData.replyTo,
+        createdAt: newMessage.createdAt
+      });
 
     } catch (error) {
       console.error("SendMessage Error:", error);
     }
   });
-
   // =========================
   // TYPING INDICATOR (FIXED)
   // =========================
