@@ -687,30 +687,34 @@ app.post("/api/seller/verify-reset-code", async (req, res) => {
   }
   res.json({ success: true });
 });
-
-// STEP 3: Reset password specifically for Sellers
 app.post("/api/seller/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
-    const seller = await Seller.findOne({ email, verificationCode: code });
 
+    const seller = await Seller.findOne({ email, verificationCode: code });
     if (!seller || seller.verificationExpires < Date.now()) {
-      return res.json({ success: false, message: "Verification failed" });
+      return res.json({ success: false, message: "Invalid or expired code" });
     }
 
+    // 1. Hash it here
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    // Using findByIdAndUpdate to ensure the save works correctly for the Seller collection
-    await Seller.findByIdAndUpdate(seller._id, {
-      $set: {
-        password: hashedPassword,
-        verificationCode: null,
-        verificationExpires: null
+    // 2. Use findOneAndUpdate (This is the "Magic" fix)
+    // It updates the DB directly and stops any "pre-save" hooks from 
+    // hashing the password a second time.
+    await Seller.findOneAndUpdate(
+      { _id: seller._id }, 
+      { 
+        $set: { 
+          password: hashedPassword,
+          verificationCode: null,
+          verificationExpires: null 
+        } 
       }
-    });
+    );
 
-    res.json({ success: true, message: "Seller password updated successfully!" });
+    res.json({ success: true, message: "Seller password updated!" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Reset failed" });
   }
