@@ -13,7 +13,6 @@ const Rating = require("./models/Rating");
 const Message = require("./models/Message");
 const Cart = require("./models/Cart");
 const Order = require("./models/Order");
-const path = require("path");
 const Booking = require("./models/booking");
 const jwt = require("jsonwebtoken");
 const { Resend } = require('resend');
@@ -127,7 +126,7 @@ app.post("/api/register", upload.fields([
     // 3. Generate 6-Digit Code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    console.log(`📧 Sending Seller Verification to: ${email}`);
+    console.log(` Sending Seller Verification to: ${email}`);
 
     // 4. Send Email via Resend
     const { data, error } = await resend.emails.send({
@@ -147,7 +146,7 @@ app.post("/api/register", upload.fields([
     });
     console.log(" API Email sent:", data.id);
     if (error) {
-      console.error("❌ Resend Error:", error);
+      console.error(" Resend Error:", error);
       return res.status(500).json({ success: false, message: "Email service failed" });
     }
 
@@ -231,7 +230,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     let profile = req.file ? req.file.path : "";
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    console.log("📧 Sending via Resend API to:", email);
+    console.log(" Sending via Resend API to:", email);
 
     // SEND EMAIL USING API (NOT SMTP)
     const { data, error } = await resend.emails.send({
@@ -242,7 +241,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     });
 
     if (error) {
-      console.error("❌ Resend Error:", error);
+      console.error(" Resend Error:", error);
       return res.status(500).json({ success: false, message: "Email failed" });
     }
 
@@ -265,7 +264,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     });
 
   } catch (error) {
-    console.error("🔥 REGISTER ERROR:", error);
+    console.error(" REGISTER ERROR:", error);
     return res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -274,7 +273,7 @@ app.post("/api/resend-verification", async (req, res) => {
   try {
     const { email, userType } = req.body;
 
-    // 🔴 Validate input
+    //  Validate input
     if (!email || !userType) {
       return res.status(400).json({
         success: false,
@@ -284,10 +283,10 @@ app.post("/api/resend-verification", async (req, res) => {
 
     console.log("Resend request:", { email, userType });
 
-    // ✅ Choose correct model
+    //  Choose correct model
     const Model = userType === "seller" ? Seller : Buyer;
 
-    // 🔍 Find user
+    //  Find user
     const user = await Model.findOne({ email });
 
     if (!user) {
@@ -297,7 +296,7 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
-    // 🚫 Already verified
+    //  Already verified
     if (user.isVerified) {
       return res.status(400).json({
         success: false,
@@ -305,17 +304,17 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
-    // 🔢 Generate new code
+    //  Generate new code
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 💾 Save new code
+    //  Save new code
     user.verificationCode = newCode;
     user.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     await user.save();
 
     console.log("New verification code:", newCode);
 
-    // 📧 Send email
+    //  Send email
     const { data, error } = await resend.emails.send({
       from: "Isonga Market <onboarding@resend.dev>",
       to: email,
@@ -337,7 +336,7 @@ app.post("/api/resend-verification", async (req, res) => {
       `
     });
 
-    // ❌ Email failed
+    //  Email failed
     if (error) {
       console.error("Resend email error:", error);
       return res.status(500).json({
@@ -346,7 +345,7 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
-    // ✅ Success
+    //  Success
     return res.json({
       success: true,
       message: "New verification code sent successfully!"
@@ -401,11 +400,11 @@ app.post("/api/verify-email", async (req, res) => {
     user.verificationExpires = null;
     await user.save();
 
-    console.log(`✅ ${modelType} verified successfully: ${email}`);
+    console.log(` ${modelType} verified successfully: ${email}`);
     res.json({ success: true, message: `${modelType} verified successfully` });
 
   } catch (error) {
-    console.error("🔥 Verify Error:", error);
+    console.error(" Verify Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -1067,7 +1066,7 @@ app.put(
         return res.json({ success: false, message: "Seller Not Found" });
       }
 
-      // 📝 BASIC DATA
+      //  BASIC DATA
       let updatedData = {
         name: req.body.name,
         location: req.body.location,
@@ -1076,17 +1075,17 @@ app.put(
       };
 
       // =============================
-      // ✅ UPDATE PROFILE IMAGE
+      //  UPDATE PROFILE IMAGE
       // =============================
       if (req.files && req.files["profileImage"]) {
-        updatedData.profile = req.files["profileImage"][0].path; // ✅ FIXED
+        updatedData.profile = req.files["profileImage"][0].path; //  FIXED
       }
 
       // =============================
-      // ✅ ADD LOCATION IMAGES
+      //  ADD LOCATION IMAGES
       // =============================
       if (req.files && req.files["files"]) {
-        const newImages = req.files["files"].map(file => file.path); // ✅ FIXED
+        const newImages = req.files["files"].map(file => file.path); //  FIXED
 
         updatedData.files = [
           ...(seller.files || []),
@@ -1095,7 +1094,7 @@ app.put(
       }
 
       // =============================
-      // 💾 SAVE UPDATE
+      //  SAVE UPDATE
       // =============================
       const updatedSeller = await Seller.findByIdAndUpdate(
         req.userId,
@@ -1217,7 +1216,7 @@ io.use((socket, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    socket.userId = decoded.id; // ✅ REQUIRED
+    socket.userId = decoded.id; //  REQUIRED
 
     next();
   } catch (err) {
@@ -1255,7 +1254,7 @@ socket.on("userOnline", (data) => {
   // 5. JOIN THE ROOM (Critical for io.to(key).emit to work)
   socket.join(key);
 
-  console.log("✅ LIVE DASHBOARD ACTIVE:", key);
+  console.log(" LIVE DASHBOARD ACTIVE:", key);
 });
 
   // =========================
@@ -1348,7 +1347,7 @@ socket.on("userOnline", (data) => {
         read: false
       });
 
-      // 4. 🔥 NEW: Count TOTAL unread messages for THIS USER (for the dashboard bubble)
+      // 4.  NEW: Count TOTAL unread messages for THIS USER (for the dashboard bubble)
       const totalUnreadMessages = await Message.countDocuments({
         receiver,
         read: false
@@ -1368,7 +1367,7 @@ socket.on("userOnline", (data) => {
 
       const receiverKey = `${normalize(receiverModel)}_${receiver}`;
       
-      // ✅ TARGET THE ROOM (More reliable than onlineUsers Map)
+      //  TARGET THE ROOM (More reliable than onlineUsers Map)
       // Since your userOnline logic joins socket.join(key), we can emit directly to the room
       io.to(receiverKey).emit("newMessageNotification", {
         room,
@@ -1378,7 +1377,7 @@ socket.on("userOnline", (data) => {
         receiverModel,
         message: message || "Sent an attachment",
         unreadChatCount: totalUnreadMessages,
-         // 🔥 PASSING THE TOTAL COUNT 
+         //  PASSING THE TOTAL COUNT 
          roomUnreadCount: roomUnreadCount,
         replyTo: messageData.replyTo,
         createdAt: newMessage.createdAt
@@ -1610,7 +1609,7 @@ app.get("/api/seller/conversations", auth, async (req, res) => {
         }
       },
 
-      // 5. 🔥 DELETE FILTER: Remove if seller ID is in deletedFor array
+      // 5.  DELETE FILTER: Remove if seller ID is in deletedFor array
       {
         $match: {
           $expr: {
@@ -2166,8 +2165,8 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
     const displayId = item._id.toString().slice(-6).toUpperCase();
     const notificationMessage =
       status === "Accepted"
-        ? `✅ Your order #${displayId} has been accepted!`
-        : `❌ Your order #${displayId} was declined.`;
+        ? ` Your order #${displayId} has been accepted!`
+        : ` Your order #${displayId} was declined.`;
 
     // 1. Create the notification in DB
     const newNotif = await Notification.create({
@@ -2205,11 +2204,11 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
     });
 
   } catch (err) {
-    console.error("🔥 Status Update Error:", err);
+    console.error(" Status Update Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-    // ✅ Add this route to handle fetching a single order by ID
+    //  Add this route to handle fetching a single order by ID
     app.get("/api/orders/:id", auth, async (req, res) => {
       try {
         const orderId = req.params.id;
@@ -2242,7 +2241,7 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
           order,
         });
       } catch (err) {
-        console.error("🔥 Fetch Order Error:", err);
+        console.error(" Fetch Order Error:", err);
         res.status(500).json({
           success: false,
           message: "Server error while fetching order",
@@ -2250,7 +2249,7 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
       }
     });
 
-    // ✅ CORRECTED: MARK ALL NOTIFICATIONS AS READ
+    //  CORRECTED: MARK ALL NOTIFICATIONS AS READ
     app.put("/api/notifications/mark-read", auth, async (req, res) => {
       try {
         // We update based on the 'read' boolean to match your unread-count route
@@ -2280,7 +2279,7 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
           .populate({
             path: "sender",
             select: "name profile",
-            options: { strictPopulate: false } // ✅ prevents crash from old data
+            options: { strictPopulate: false } //  prevents crash from old data
           })
           .sort({ createdAt: -1 })
           .limit(20);
@@ -2291,12 +2290,12 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
         });
 
       } catch (error) {
-        console.error("🔥 Fetch Notif Error FULL:", error);
+        console.error(" Fetch Notif Error FULL:", error);
         res.status(500).json({ success: false, message: error.message });
       }
     });
 
-    // ✅ THIS ONE WAS ALREADY CORRECT
+    //  THIS ONE WAS ALREADY CORRECT
     app.get("/api/notifications/unread-count", auth, async (req, res) => {
       try {
         const count = await Notification.countDocuments({
@@ -2413,7 +2412,7 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
 
         const newBooking = await Booking.create(bookingData);
 
-// ✅ USE ROOMS FOR RELIABLE NOTIFICATIONS
+//  USE ROOMS FOR RELIABLE NOTIFICATIONS
 const sellerRoom = `Seller_${productData.seller}`;
 
 // This sends to ALL devices/tabs the seller has open
@@ -2478,16 +2477,16 @@ res.json({
           return res.status(404).json({ success: false, message: "Booking not found" });
         }
 
-        // ✅ CREATE NOTIFICATION
+        //  CREATE NOTIFICATION
         const displayId = updatedBooking._id.toString().slice(-6).toUpperCase();
 
         const notificationMessage =
           status === "Accepted"
-            ? `✅ Your booking #${displayId} has been accepted!`
-            : `❌ Your booking #${displayId} was declined.`;
+            ? ` Your booking #${displayId} has been accepted!`
+            : ` Your booking #${displayId} was declined.`;
 
         const newNotif = await Notification.create({
-          recipient: updatedBooking.buyer,   // ⚠️ MUST exist in Booking schema
+          recipient: updatedBooking.buyer,   //  MUST exist in Booking schema
           sender: sellerId,
           message: notificationMessage,
           bookingId: updatedBooking._id,
@@ -2495,10 +2494,10 @@ res.json({
           category: "Booking"
         });
 
-        // ✅ SOCKET REAL-TIME
+        //  SOCKET REAL-TIME
        // ... inside app.put("/api/bookings/:id") after creating the Notification ...
 
-// ✅ USE ROOMS FOR BUYER NOTIFICATIONS
+//  USE ROOMS FOR BUYER NOTIFICATIONS
 const buyerRoom = `Buyer_${updatedBooking.buyer}`;
 
 const unreadCount = await Notification.countDocuments({
@@ -2520,12 +2519,12 @@ io.to(buyerRoom).emit("new_notification", {
 res.json({ success: true, booking: updatedBooking });
 
       } catch (error) {
-        console.error("🔥 Booking Update Error:", error);
+        console.error(" Booking Update Error:", error);
         res.status(500).json({ success: false, message: "Update Error" });
       }
     });
 
-    // ✅ GET SINGLE BOOKING (FIX)
+    //  GET SINGLE BOOKING (FIX)
     app.get("/api/bookings/:id", auth, async (req, res) => {
       try {
         const bookingId = req.params.id;
@@ -2540,7 +2539,7 @@ res.json({ success: true, booking: updatedBooking });
           });
         }
 
-        // ✅ Security check (same as order)
+        //  Security check (same as order)
         const isBuyer = booking.buyer.toString() === req.userId.toString();
         const isSeller = booking.seller.toString() === req.userId.toString();
 
@@ -2557,7 +2556,7 @@ res.json({ success: true, booking: updatedBooking });
         });
 
       } catch (err) {
-        console.error("🔥 Fetch Booking Error:", err);
+        console.error(" Fetch Booking Error:", err);
         res.status(500).json({
           success: false,
           message: "Server error while fetching booking",
@@ -2721,7 +2720,7 @@ res.json({ success: true, booking: updatedBooking });
       todayViews: currentTodayEntry ? currentTodayEntry.buyers.length : 0
     });
 
-    console.log(`📡 View update broadcasted to room: ${sellerKey}`);
+    console.log(` View update broadcasted to room: ${sellerKey}`);
 
     res.json({ success: true });
   } catch (error) {
@@ -2739,5 +2738,5 @@ res.json({ success: true, booking: updatedBooking });
     // ==============================
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
-      console.log(`🚀 Server is running on port ${PORT}`);
+      console.log(` Server is running on port ${PORT}`);
     });

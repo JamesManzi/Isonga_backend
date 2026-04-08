@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema({
 
   sender: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Seller',   // ✅ MUST match your Seller model name
+    ref: 'Seller',   // MUST match your Seller model name
     required: true 
   },
 
@@ -24,7 +24,7 @@ const notificationSchema = new mongoose.Schema({
   },
   bookingId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Booking'   // ✅ ADD THIS
+    ref: 'Booking'   //  ADD THIS
   },
   read: { 
     type: Boolean, 
@@ -33,9 +33,9 @@ const notificationSchema = new mongoose.Schema({
 
   category: {
     type: String,
-    enum: ["Order", "Booking"]  // ✅ IMPORTANT (prevents bugs)
+    enum: ["Order", "Booking"]  //  IMPORTANT (prevents bugs)
   }
 
-}, { timestamps: true }); // ✅ replaces createdAt manually
+}, { timestamps: true }); //  replaces createdAt manually
 
 module.exports = mongoose.model("Notification", notificationSchema);
