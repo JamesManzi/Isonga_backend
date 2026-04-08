@@ -1304,7 +1304,9 @@ socket.on("userOnline", (data) => {
         receiver,
         receiverModel,
         message: message || "Sent an attachment",
-        unreadChatCount: totalUnreadMessages, // 🔥 PASSING THE TOTAL COUNT HERE
+        unreadChatCount: totalUnreadMessages,
+         // 🔥 PASSING THE TOTAL COUNT 
+         roomUnreadCount: roomUnreadCount,
         replyTo: messageData.replyTo,
         createdAt: newMessage.createdAt
       });
