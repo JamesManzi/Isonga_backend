@@ -991,52 +991,56 @@ app.delete("/api/products/delete/:productId", auth, async (req, res) => {
 
 app.put("/api/products/update/:id", auth, upload.array("files", 10), async (req, res) => {
   try {
-
     const productId = req.params.id;
+
     const product = await Product.findById(productId);
     if (!product) {
-      return res.json({ success: false, message: "Product Not Found" });
+      return res.status(404).json({ success: false, message: "Product Not Found" });
     }
 
-    if (product.seller.toString() !== req.userId) {
-      return res.json({ success: false, message: "UnAuthorised" });
+    // ✅ SAFE check
+    if (!product.seller || product.seller.toString() !== req.userId) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
     const { name, price, category, location, description, quantity } = req.body;
 
+    // ✅ Prevent NaN crash
+    const parsedPrice = price ? Number(price) : product.price;
+    const parsedQuantity = quantity ? Number(quantity) : product.quantity;
+
     const updatedData = {
-      name,
-      price: Number(price),
-      category,
-      location,
-      description,
-      quantity: Number(quantity),
-      files: product.files || [], // start with old files
+      name: name || product.name,
+      price: isNaN(parsedPrice) ? product.price : parsedPrice,
+      category: category || product.category,
+      location: location || product.location,
+      description: description || product.description,
+      quantity: isNaN(parsedQuantity) ? product.quantity : parsedQuantity,
+      files: product.files || [],
     };
 
-    // Append new files instead of replacing
+    // ✅ Safe file handling
     if (req.files && req.files.length > 0) {
-      const newFiles = req.files.map(file => file.path);
-      updatedData.files = updatedData.files.concat(newFiles);
+      const newFiles = req.files.map(file => file.path || file.filename);
+      updatedData.files = [...updatedData.files, ...newFiles];
     }
 
-    const UpdatedProduct = await Product.findByIdAndUpdate(
+    const updatedProduct = await Product.findByIdAndUpdate(
       productId,
       updatedData,
-      { returnDocument: "after" } // avoids mongoose deprecation warning
+      { new: true } // ✅ correct option
     );
-
 
     res.json({
       success: true,
-      UpdatedProduct,
+      updatedProduct,
     });
+
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false, message: "Updating Product Error" });
+    console.error("🔥 UPDATE PRODUCT ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
-
 app.get("/api/buyer_profile/update", auth, async (req, res) => {
   try {
 
