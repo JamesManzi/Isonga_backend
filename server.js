@@ -2606,61 +2606,65 @@ res.json({ success: true, booking: updatedBooking });
         res.status(500).json({ success: false });
       }
     });
+app.post("/api/seller/view/:id", auth, async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    const buyerId = req.userId;
 
-    app.post("/api/seller/view/:id", auth, async (req, res) => {
-      try {
-        const sellerId = req.params.id;
-        const buyerId = req.userId;
+    if (!buyerId) return res.json({ success: false, message: "Guest view" });
 
-        if (!buyerId) return res.json({ success: false, message: "Guest view" });
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    const seller = await Seller.findById(sellerId);
+    if (!seller) return res.json({ success: false });
 
-        const seller = await Seller.findById(sellerId);
-        if (!seller) return res.json({ success: false });
+    // Find today's entry
+    let todayEntry = seller.dailyViews.find(
+      (d) => new Date(d.date).getTime() === today.getTime()
+    );
 
-        // Check if there is an entry for today's date
-        let todayEntry = seller.dailyViews.find(
-          (d) => new Date(d.date).getTime() === today.getTime()
-        );
-
-        if (!todayEntry) {
-          // First visitor of the day
-          seller.dailyViews.push({ date: today, buyers: [buyerId] });
-          seller.views += 1;
-        } else {
-          // Check if THIS buyer has already been counted today
-          const hasViewed = todayEntry.buyers.includes(buyerId);
-          if (!hasViewed) {
-            todayEntry.buyers.push(buyerId);
-            seller.views += 1;
-          } else {
-            // Already counted this buyer today - do nothing
-            return res.json({ success: true, message: "Already visited today" });
-          }
-        }
-
-        await seller.save();
-        const sellerKey = `Seller_${sellerId}`;
-        const sellerSocket = onlineUsers.get(sellerKey);
-
-        if (sellerSocket) {
-          const todayEntry = seller.dailyViews.find(
-            d => new Date(d.date).getTime() === today.getTime()
-          );
-
-          io.to(sellerSocket).emit("newView", {
-            totalViews: seller.views,
-            todayViews: todayEntry ? todayEntry.buyers.length : 0
-          });
-        }
-        res.json({ success: true });
-      } catch (error) {
-        res.status(500).json({ success: false });
+    if (!todayEntry) {
+      // First visitor of the day
+      seller.dailyViews.push({ date: today, buyers: [buyerId] });
+      seller.views += 1;
+    } else {
+      // Check if THIS buyer has already been counted today
+      const hasViewed = todayEntry.buyers.includes(buyerId);
+      if (!hasViewed) {
+        todayEntry.buyers.push(buyerId);
+        seller.views += 1;
+      } else {
+        // Stop here if already viewed; no socket update needed
+        return res.json({ success: true, message: "Already visited today" });
       }
-    });
+    }
 
+    await seller.save();
+
+    // Trigger Real-Time Update
+    const sellerKey = `Seller_${sellerId}`;
+    const sellerSocket = onlineUsers.get(sellerKey);
+
+    if (sellerSocket) {
+      // Re-find todayEntry to get the updated buyers list length
+      const currentTodayEntry = seller.dailyViews.find(
+        (d) => new Date(d.date).getTime() === today.getTime()
+      );
+
+      // CHANGED: Event name "newView" -> "viewUpdate" to match frontend
+      io.to(sellerSocket).emit("viewUpdate", {
+        totalViews: seller.views,
+        todayViews: currentTodayEntry ? currentTodayEntry.buyers.length : 0
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("View Update Error:", error);
+    res.status(500).json({ success: false });
+  }
+});
     app.post("/api/logout", (req, res) => {
       res.json({
         success: true,
