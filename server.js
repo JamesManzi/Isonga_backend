@@ -647,6 +647,75 @@ app.get("/api/my_store", auth, async (req, res) => {
   }
 })
 
+// --- SELLER PASSWORD RECOVERY ROUTES ---
+
+// STEP 1: Send code specifically for Sellers
+app.post("/api/seller/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const seller = await Seller.findOne({ email });
+
+    if (!seller) {
+      return res.json({ success: false, message: "No seller account found with this email" });
+    }
+
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    seller.verificationCode = resetCode;
+    seller.verificationExpires = Date.now() + 5 * 60 * 1000;
+    await seller.save();
+
+    await resend.emails.send({
+      from: 'Isonga Market <onboarding@resend.dev>',
+      to: email,
+      subject: 'Seller Password Reset',
+      html: `<p>Your seller reset code is: <b>${resetCode}</b></p>`
+    });
+
+    res.json({ success: true, message: "Code sent to seller email" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error sending email" });
+  }
+});
+
+// STEP 2: Verify code specifically for Sellers
+app.post("/api/seller/verify-reset-code", async (req, res) => {
+  const { email, code } = req.body;
+  const seller = await Seller.findOne({ email, verificationCode: code });
+
+  if (!seller || seller.verificationExpires < Date.now()) {
+    return res.json({ success: false, message: "Invalid or expired seller code" });
+  }
+  res.json({ success: true });
+});
+
+// STEP 3: Reset password specifically for Sellers
+app.post("/api/seller/reset-password", async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    const seller = await Seller.findOne({ email, verificationCode: code });
+
+    if (!seller || seller.verificationExpires < Date.now()) {
+      return res.json({ success: false, message: "Verification failed" });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Using findByIdAndUpdate to ensure the save works correctly for the Seller collection
+    await Seller.findByIdAndUpdate(seller._id, {
+      $set: {
+        password: hashedPassword,
+        verificationCode: null,
+        verificationExpires: null
+      }
+    });
+
+    res.json({ success: true, message: "Seller password updated successfully!" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Reset failed" });
+  }
+});
+
 app.get("/api/seller_profile", auth, async (req, res) => {
   try {
 
