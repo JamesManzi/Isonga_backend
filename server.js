@@ -2085,75 +2085,78 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
     });
 
     app.put("/api/order/status/:id", auth, async (req, res) => {
-      try {
-        const sellerId = req.userId;
-        const id = req.params.id;
-        const { status } = req.body;
+  try {
+    const sellerId = req.userId;
+    const id = req.params.id;
+    const { status } = req.body;
 
-        const item = await Order.findById(id);
+    const item = await Order.findById(id);
 
-        if (!item) {
-          return res.status(404).json({ success: false, message: "Order not found" });
-        }
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
 
-        // Check ownership
-        const isOwner = item.items.some(i => i.seller.toString() === sellerId);
+    // Check ownership
+    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, message: "Not authorized" });
+    }
 
-        if (!isOwner) {
-          return res.status(403).json({ success: false, message: "Not authorized" });
-        }
+    // Prevent duplicate updates
+    if (item.status !== "Pending") {
+      return res.json({ success: false, message: `Already ${item.status}` });
+    }
 
-        // Prevent duplicate updates
-        if (item.status !== "Pending") {
-          return res.json({ success: false, message: `Already ${item.status}` });
-        }
+    // Update status
+    item.status = status;
+    await item.save();
 
-        // Update status
-        item.status = status;
-        await item.save();
+    const displayId = item._id.toString().slice(-6).toUpperCase();
+    const notificationMessage =
+      status === "Accepted"
+        ? `✅ Your order #${displayId} has been accepted!`
+        : `❌ Your order #${displayId} was declined.`;
 
-        const displayId = item._id.toString().slice(-6).toUpperCase();
-
-        const notificationMessage =
-          status === "Accepted"
-            ? `✅ Your order #${displayId} has been accepted!`
-            : `❌ Your order #${displayId} was declined.`;
-
-        const newNotif = await Notification.create({
-          recipient: item.buyer,
-          sender: sellerId,
-          message: notificationMessage,
-          orderId: item._id,
-          read: false,
-          category: "Order"
-        });
-
-        const buyerKey = `Buyer_${item.buyer}`;
-        // ✅ NEW WAY
-        const buyerRoom = `Buyer_${item.buyer}`;
-
-        io.to(buyerRoom).emit("new_notification", {
-          _id: newNotif._id,
-          message: notificationMessage,
-          unreadCount, // Ensure you calculate this as you did before
-          orderId: item._id,
-          status,
-          createdAt: newNotif.createdAt
-        });
-
-
-        res.json({
-          success: true,
-          message: `Order ${status.toLowerCase()} successfully`,
-          data: item
-        });
-
-      } catch (err) {
-        console.error("🔥 Status Update Error:", err);
-        res.status(500).json({ success: false, message: "Internal Server Error" });
-      }
+    // 1. Create the notification in DB
+    const newNotif = await Notification.create({
+      recipient: item.buyer,
+      sender: sellerId,
+      message: notificationMessage,
+      orderId: item._id,
+      read: false,
+      category: "Order"
     });
 
+    // 2. CRITICAL: Calculate the REAL unread count for this buyer
+    const unreadCount = await Notification.countDocuments({
+      recipient: item.buyer,
+      read: false
+    });
+
+    const buyerRoom = `Buyer_${item.buyer}`;
+
+    // 3. EMIT: Match the frontend listener name
+    // If your frontend uses socket.on("notification"), change it here:
+    io.to(buyerRoom).emit("notification", {
+      _id: newNotif._id,
+      message: notificationMessage,
+      unreadCount: unreadCount, // Now this has a real value!
+      orderId: item._id,
+      status: status,
+      createdAt: newNotif.createdAt
+    });
+
+    res.json({
+      success: true,
+      message: `Order ${status.toLowerCase()} successfully`,
+      data: item
+    });
+
+  } catch (err) {
+    console.error("🔥 Status Update Error:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
     // ✅ Add this route to handle fetching a single order by ID
     app.get("/api/orders/:id", auth, async (req, res) => {
       try {
