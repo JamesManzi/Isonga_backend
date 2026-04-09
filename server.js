@@ -28,7 +28,7 @@ app.set("trust proxy", 1);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim())
-  : [];
+  : ["https://isonga-frontend.vercel.app"];
 
 app.use(cors({
   origin: function (origin, callback) {
