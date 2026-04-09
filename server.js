@@ -51,25 +51,28 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Login limiter (define FIRST)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts
+const { ipKeyGenerator } = require('express-rate-limit');
 
+const ipLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 100,
   message: {
     success: false,
-    message: "Too many login attempts, please try again after 15 minutes"
+    message: "Too many requests from this IP, try later"
   },
-
-  standardHeaders: true,
-  legacyHeaders: false,
-
-  //  Better: limit by email + IP (not just IP)
-  keyGenerator: (req) => {
-    return (req.body.email || "unknown") + "-" + req.ip;
-  },
+  keyGenerator: (req) => ipKeyGenerator(req), 
 });
-app.use('/api/login', loginLimiter);
-app.use('/api/buyer_login', loginLimiter);
+
+const emailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 5, // strict for login
+  message: {
+    success: false,
+    message: "Too many login attempts for this account"
+  },
+ keyGenerator: (req) => req.body?.email || "unknown",
+});
+
 // Store Uploads
 const { upload } = require('./cloudinary');
 
@@ -115,7 +118,7 @@ app.post("/api/register", upload.fields([
     if (!req.files || !req.files.profile) {
       return res.status(400).json({ success: false, message: "Profile image required" });
     }
-    if (!req.files || !req.files.files) {
+    if (!req.files || !req.files.files || req.files.files.length < 2) {
       return res.status(400).json({ success: false, message: "Location Images Required" })
     }
     // 2. Prepare Data
@@ -179,7 +182,7 @@ app.post("/api/register", upload.fields([
   }
 });
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/login",ipLimiter, emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -218,13 +221,15 @@ app.post("/api/login", async (req, res) => {
 
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
-    const { name, email, password, repeat_pass } = req.body;
+    const { name, email, password} = req.body;
 
     const ExistingBuyer = await Buyer.findOne({ email });
     if (ExistingBuyer) {
       return res.json({ success: false, message: "User Already Exist" });
     }
-
+    if(!req.file||!req.file.profile){
+      return res.json({success:false,message:"Profile Image Required"});
+    }
     // ... Keep your password regex and hashing logic here ...
     const hashed = await bcrypt.hash(password, 12);
     let profile = req.file ? req.file.path : "";
@@ -273,7 +278,7 @@ app.post("/api/resend-verification", async (req, res) => {
   try {
     const { email, userType } = req.body;
 
-    //  Validate input
+    // 1. Validate input
     if (!email || !userType) {
       return res.status(400).json({
         success: false,
@@ -281,12 +286,20 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
+    // 2. Validate userType FIRST
+    if (!["seller", "buyer"].includes(userType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user type"
+      });
+    }
+
     console.log("Resend request:", { email, userType });
 
-    //  Choose correct model
+    // 3. Choose model
     const Model = userType === "seller" ? Seller : Buyer;
 
-    //  Find user
+    // 4. Find user
     const user = await Model.findOne({ email });
 
     if (!user) {
@@ -296,7 +309,7 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
-    //  Already verified
+    // 5. Already verified
     if (user.isVerified) {
       return res.status(400).json({
         success: false,
@@ -304,39 +317,44 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
-    //  Generate new code
+    // 6. Rate limit (AFTER user exists)
+    if (
+      user.lastVerificationSent &&
+      Date.now() - user.lastVerificationSent < 60000
+    ) {
+      return res.status(429).json({
+        success: false,
+        message: "Please wait before requesting again"
+      });
+    }
+
+    // 7. Generate new code
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    //  Save new code
+    // 8. Save new code + timestamp
     user.verificationCode = newCode;
-    user.verificationExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.verificationExpires = Date.now() + 10 * 60 * 1000;
+    user.lastVerificationSent = Date.now(); 
     await user.save();
 
-    console.log("New verification code:", newCode);
 
-    //  Send email
-    const { data, error } = await resend.emails.send({
+    // 9. Send email
+    const { error } = await resend.emails.send({
       from: "Isonga Market <onboarding@resend.dev>",
       to: email,
       subject: "Your New Verification Code",
       html: `
-        <div style="font-family: sans-serif; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px;">
-          <h2 style="color: #2563eb;">Isonga Market</h2>
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>Isonga Market</h2>
           <p>Hello ${user.name || "User"},</p>
-          <p>You requested a new verification code for your <strong>${userType}</strong> account.</p>
-          
-          <div style="font-size: 24px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 10px 20px; margin: 10px 0;">
-            ${newCode}
-          </div>
-
-          <p style="color: #64748b; font-size: 14px;">
-            This code will expire in 10 minutes and replaces any previous codes.
-          </p>
+          <p>Your new verification code is:</p>
+          <h1>${newCode}</h1>
+          <p>This code expires in 10 minutes.</p>
         </div>
       `
     });
 
-    //  Email failed
+    // 10. Email error
     if (error) {
       console.error("Resend email error:", error);
       return res.status(500).json({
@@ -345,7 +363,7 @@ app.post("/api/resend-verification", async (req, res) => {
       });
     }
 
-    //  Success
+    // 11. Success
     return res.json({
       success: true,
       message: "New verification code sent successfully!"
@@ -365,8 +383,6 @@ app.post("/api/verify-email", async (req, res) => {
     const { email, code } = req.body;
     const inputCode = String(code).trim();
 
-    // 1. Look for the user in both collections specifically for the code
-    // This solves the issue if an email exists in both Buyer and Seller collections
     let user = await Buyer.findOne({ email, verificationCode: inputCode });
     let modelType = "Buyer";
 
@@ -410,7 +426,7 @@ app.post("/api/verify-email", async (req, res) => {
 });
 
 
-app.post("/api/buyer_login", async (req, res) => {
+app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -523,7 +539,7 @@ app.post("/api/verify-reset-code", async (req, res) => {
   res.json({ success: true }); // Move to step 3
 });
 
-app.post("/api/add_product", auth, upload.array("files", 10), auth, async (req, res) => {
+app.post("/api/add_product", upload.array("files", 10), auth, async (req, res) => {
   try {
 
     const { type, name, price, location, category, description, quantity } = req.body;
@@ -602,9 +618,9 @@ app.get("/api/dashboard", auth, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const todayEntry = seller.dailyViews.find(
-      d => new Date(d.date).getTime() === today.getTime()
-    );
+    const todayEntry = seller.dailyViews.find(d =>
+  new Date(d.date).toDateString() === today.toDateString()
+);
 
     const todayViews = todayEntry ? todayEntry.buyers.length : 0;
 
@@ -686,6 +702,7 @@ app.post("/api/seller/verify-reset-code", async (req, res) => {
   }
   res.json({ success: true });
 });
+
 app.post("/api/seller/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
@@ -699,9 +716,6 @@ app.post("/api/seller/reset-password", async (req, res) => {
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    // 2. Use findOneAndUpdate (This is the "Magic" fix)
-    // It updates the DB directly and stops any "pre-save" hooks from 
-    // hashing the password a second time.
     await Seller.findOneAndUpdate(
       { _id: seller._id }, 
       { 
@@ -769,8 +783,6 @@ app.get("/api/buyer_dashboard", auth, async (req, res) => {
       "name location category profile files description"
     );
 
-    // 3. Map through sellers to attach ratings
-    // Using Promise.all is correct for parallel DB queries
     const sellersWithRatings = await Promise.all(
       sellers.map(async (seller) => {
         // Ensure 'Rating' model is imported at the top of your file!
@@ -851,8 +863,6 @@ app.get("/api/view_products/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
 
-    // 1. INCREMENT VIEW COUNT
-    // We update the Seller model because the 'views' stat belongs to them
     const updatedSeller = await Seller.findByIdAndUpdate(
       sellerId,
       { $inc: { views: 1 } },
@@ -924,6 +934,7 @@ app.get("/api/Asset_Products/:id", auth, async (req, res) => {
     return res.status(500).json({ success: false, message: "View Products Error" });
   }
 })
+
 app.get("/api/sellers/:category", auth, async (req, res) => {
   try {
     // Find sellers by category
@@ -989,58 +1000,7 @@ app.delete("/api/products/delete/:productId", auth, async (req, res) => {
   }
 });
 
-app.put("/api/products/update/:id", auth, upload.array("files", 10), async (req, res) => {
-  try {
-    const productId = req.params.id;
 
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, message: "Product Not Found" });
-    }
-
-    // ✅ SAFE check
-    if (!product.seller || product.seller.toString() !== req.userId) {
-      return res.status(403).json({ success: false, message: "Unauthorized" });
-    }
-
-    const { name, price, category, location, description, quantity } = req.body;
-
-    // ✅ Prevent NaN crash
-    const parsedPrice = price ? Number(price) : product.price;
-    const parsedQuantity = quantity ? Number(quantity) : product.quantity;
-
-    const updatedData = {
-      name: name || product.name,
-      price: isNaN(parsedPrice) ? product.price : parsedPrice,
-      category: category || product.category,
-      location: location || product.location,
-      description: description || product.description,
-      quantity: isNaN(parsedQuantity) ? product.quantity : parsedQuantity,
-      files: product.files || [],
-    };
-
-    // ✅ Safe file handling
-    if (req.files && req.files.length > 0) {
-      const newFiles = req.files.map(file => file.path || file.filename);
-      updatedData.files = [...updatedData.files, ...newFiles];
-    }
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      updatedData,
-      { new: true } // ✅ correct option
-    );
-
-    res.json({
-      success: true,
-      updatedProduct,
-    });
-
-  } catch (error) {
-    console.error("🔥 UPDATE PRODUCT ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 app.get("/api/buyer_profile/update", auth, async (req, res) => {
   try {
 
@@ -1097,6 +1057,12 @@ app.put(
         ];
       }
 
+      if (!req.body.name || !req.body.phone) {
+  return res.status(400).json({
+    success: false,
+    message: "Required fields missing"
+  });
+}
       // =============================
       //  SAVE UPDATE
       // =============================
@@ -2716,9 +2682,6 @@ res.json({ success: true, booking: updatedBooking });
       (d) => new Date(d.date).getTime() === today.getTime()
     );
 
-    // CRITICAL FIX: 
-    // Instead of io.to(sellerSocket), we use io.to(sellerKey).
-    // This sends the update to EVERY tab the seller has open in that room.
     io.to(sellerKey).emit("viewUpdate", {
       totalViews: seller.views,
       todayViews: currentTodayEntry ? currentTodayEntry.buyers.length : 0
