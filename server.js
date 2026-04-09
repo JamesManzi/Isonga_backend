@@ -2293,6 +2293,7 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
         res.status(500).json({ success: false });
       }
     });
+
     app.post("/api/rate_seller", auth, async (req, res) => {
   try {
     const { sellerId, rating, comment } = req.body;
@@ -2716,6 +2717,61 @@ res.json({ success: true, booking: updatedBooking });
         message: "Logged out successfully"
       });
     });
+
+    // --- UPDATE PRODUCT ROUTE ---
+app.put("/api/products/update/:productId", auth, upload.array("files", 10), async (req, res) => {
+  try {
+    const productId = req.params.productId;
+    const { name, price, location, category, description, quantity, type } = req.body;
+
+    // 1. Find product and check ownership
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product Not Found" });
+    }
+
+    if (product.seller.toString() !== req.userId) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    // 2. Prepare Update Object
+    let updatedData = {
+      name,
+      price,
+      location,
+      category,
+      description,
+      quantity,
+      type
+    };
+
+    // 3. Handle New Images (If any are uploaded)
+    if (req.files && req.files.length > 0) {
+      const newFiles = req.files.map(file => file.path);
+      // Option: Replace old images or append them. 
+      // Most users expect to keep old ones + add new ones:
+      updatedData.files = [...product.files, ...newFiles];
+    }
+
+    // 4. Save to Database
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { $set: updatedData },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Product Updated Successfully",
+      product: updatedProduct
+    });
+
+  } catch (error) {
+    console.error("Update Product Error:", error);
+    res.status(500).json({ success: false, message: "Server Error during update" });
+  }
+});
+
     // START SERVER
     // ==============================
     const PORT = process.env.PORT;
