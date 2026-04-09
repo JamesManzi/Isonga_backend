@@ -27,7 +27,7 @@ app.set("trust proxy", 1);
 
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
+  ? process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim())
   : [];
 
 app.use(cors({
@@ -1167,13 +1167,28 @@ app.get("/api/product_views", auth, async (req, res) => {
 const httpServer = require("http").createServer(app);
 const { Server } = require("socket.io");
 
+const AllowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  : [];
+
 const io = new Server(httpServer, {
   cors: {
-    origin: "https://isonga-frontend.vercel.app",
+    origin: (origin, callback) => {
+      // allow requests with no origin (like mobile apps, curl)
+      if (!origin) return callback(null, true);
+
+      if (AllowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS not allowed"));
+    },
     methods: ["GET", "POST"],
   },
-  transports: ["polling", "websocket"],
-  pingTimeout: 60000, // Increase timeout for slower connections
+
+  transports: ["websocket", "polling"], // prioritize websocket
+  pingTimeout: 60000,
+  pingInterval: 25000, // keeps connection alive better
 });
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
