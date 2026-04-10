@@ -43,7 +43,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-app.options("*", cors()); // This tells the server to say "YES" to all preflight checks
+app.options("(.*)", cors());
 const httpServer = require("http").createServer(app);
 const { Server } = require("socket.io");
 
