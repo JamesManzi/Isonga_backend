@@ -43,8 +43,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-// New Express 5 / path-to-regexp v8 syntax for "all routes"
-app.options("/:any*", cors(corsOptions));
+
 const httpServer = require("http").createServer(app);
 const { Server } = require("socket.io");
 
