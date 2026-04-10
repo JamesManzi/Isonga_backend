@@ -24,28 +24,11 @@ const Conversation = require("./models/Conversation");
 const app = express();
 
 app.set("trust proxy", 1);
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
-  : ["https://isongamarket.com"];
+app.use(cors({
+  origin:process.env.ALLOWED_ORIGINS,
+  methods:["Get","Post","Put","Option"],
+}))
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false); // IMPORTANT FIX
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  optionsSuccessStatus: 204,
-  maxAge: 600
-};
-
-app.use(cors(corsOptions));
 // Define How Data Are Sent
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
