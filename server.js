@@ -43,6 +43,26 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
+const httpServer = require("http").createServer(app);
+const { Server } = require("socket.io");
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ["websocket", "polling"]
+});
 // Define How Data Are Sent
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -1160,25 +1180,6 @@ app.get("/api/product_views", auth, async (req, res) => {
   }
 });
 
-const httpServer = require("http").createServer(app);
-const { Server } = require("socket.io");
-
-const io = new Server(httpServer, {
-  cors: {
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(null, false);
-    },
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  transports: ["websocket", "polling"]
-});
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
 const onlineUsers = new Map();
