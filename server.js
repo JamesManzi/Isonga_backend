@@ -26,7 +26,8 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(cors({
   origin:process.env.ALLOWED_ORIGINS,
-  methods:["Get","Post","Put","Option"],
+  methods:['GET','POST','PUT','DELETE'],
+  allowedHeaders:['content-Type','Authorization']
 }))
 
 // Define How Data Are Sent
@@ -1155,17 +1156,8 @@ const AllowedOrigins = process.env.ALLOWED_ORIGINS
 
 const io = new Server(httpServer, {
   cors: {
-    origin: (origin, callback) => {
-      // allow requests with no origin (like mobile apps, curl)
-      if (!origin) return callback(null, true);
-
-      if (AllowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("CORS not allowed"));
-    },
-    methods: ["GET", "POST"],
+    origin:process.env.ALLOWED_ORIGINS,
+    methods: ["GET", "POST","PUT","DELETE"],
   },
 
   transports: ["websocket", "polling"], // prioritize websocket
