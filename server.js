@@ -42,7 +42,7 @@ app.use(cors({
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: false,
+  credentials: true,
   optionsSuccessStatus: 204,
   maxAge: 600
 }));
@@ -1190,6 +1190,7 @@ const io = new Server(httpServer, {
   pingTimeout: 60000,
   pingInterval: 25000, // keeps connection alive better
 });
+app.set("socketio", io);
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
 const onlineUsers = new Map();
