@@ -28,20 +28,20 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim())
   : ["https://isongamarket.com"];
 
-
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
+      return callback(null, true);
     }
+
+    // IMPORTANT: do NOT throw error
+    return callback(null, false);
   },
-   methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS'],         
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials:true
+  credentials: true
 }));
 // Define How Data Are Sent
 app.use(express.json());
@@ -1163,18 +1163,22 @@ app.get("/api/product_views", auth, async (req, res) => {
 const httpServer = require("http").createServer(app);
 const { Server } = require("socket.io");
 
-
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-  },
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
 
-  transports: ["websocket", "polling"], // prioritize websocket
-  pingTimeout: 60000,
-  pingInterval: 25000, // keeps connection alive better
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ["websocket", "polling"]
 });
-app.set("socketio", io);
 // Store online users
 // Key = Buyer_<id> OR Seller_<id>
 const onlineUsers = new Map();
