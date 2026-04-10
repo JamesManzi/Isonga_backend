@@ -24,8 +24,12 @@ const Conversation = require("./models/Conversation");
 const app = express();
 
 app.set("trust proxy", 1);
+ALLOWED_ORIGINS=process.env.ALLOWED_ORIGINS
+?process.env.ALLOWED_ORIGINS.split(",").map(origin=>origin)
+:['https://isongamarket.com'];
+
 const corsOptions = {
-  origin: 'https://isongamarket.com',            
+  origin: process.env.ALLOWED_ORIGINS,            
   methods: ['GET', 'POST', 'PUT', 'DELETE'],         
   allowedHeaders: ['Content-Type', 'Authorization'], 
 };
@@ -1154,8 +1158,8 @@ const { Server } = require("socket.io");
 
 const io = new Server(httpServer, {
   cors: {
-    origin:'https://isongamarket.com',
-    methods: ["GET", "POST","PUT","DELETE"],
+    origin:process.env.ALLOWED_ORIGINS,
+    methods: ["GET", "POST"],
   },
 
   transports: ["websocket", "polling"], // prioritize websocket
