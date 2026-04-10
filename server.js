@@ -70,7 +70,7 @@ const emailLimiter = rateLimit({
     success: false,
     message: "Too many login attempts for this account"
   },
- keyGenerator: (req) => req.body?.emailtoLowerCase() || "unknown",
+ keyGenerator: (req) => req.body?.email?.toLowerCase() || "unknown",
 });
 
 // Store Uploads
