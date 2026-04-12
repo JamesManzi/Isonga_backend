@@ -454,6 +454,66 @@ app.post("/api/buyer-verify-email",async(req,res)=>{
   }
 })
 
+app.post("/api/buyer-resend-verification",async(req,res)=>{
+  try {
+    const {email}=req.body;
+    if(!email){
+      return res.json({success:false,message:"Email Required"})
+    }
+    const buyer=await Buyer.findOne({email});
+    if(!buyer){
+      return res.json({success:false,message:"Buyer Not Found"});
+    }
+    if(buyer.isVerified){
+      return res.json({success:false,message:"UserVerified Login Please!"})
+    }
+    if (
+      buyer.lastVerificationSent &&
+      Date.now() - buyer.lastVerificationSent < 60000
+    ) {
+      return res.status(429).json({
+        success: false,
+        message: "Please wait before requesting again"
+      });
+    }
+
+     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 8. Save new code + timestamp
+    buyer.verificationCode = newCode;
+    buyer.verificationExpires = Date.now() + 10 * 60 * 1000;
+    buyer.lastVerificationSent = Date.now(); 
+    await buyer.save();
+
+
+    // 9. Send email
+    const { error } = await resend.emails.send({
+      from: "Isonga Market <onboarding@resend.dev>",
+      to: email,
+      subject: "Your New Verification Code",
+      html: `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>Isonga Market</h2>
+          <p>Hello ${user.name || "User"},</p>
+          <p>Your new verification code is:</p>
+          <h1>${newCode}</h1>
+          <p>This code expires in 10 minutes.</p>
+        </div>
+      `
+    });
+
+    // 11. Success
+    return res.json({
+      success: true,
+      message: "New verification code sent successfully!"
+    });
+
+  } catch (error) {
+    console.log(error);
+    res.json({success:false,message:"Resending Email Error"})
+  }
+})
+
 app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
