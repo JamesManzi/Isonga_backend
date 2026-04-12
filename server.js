@@ -343,45 +343,53 @@ app.post("/api/buyer-verify-email",async(req,res)=>{
   }
 })
 
-app.post("/api/buyer-resend-verification",async(req,res)=>{
+app.post("/api/buyer-resend-verification", async (req, res) => {
   try {
-    const {email}=req.body;
-    if(!email){
-      return res.json({success:false,message:"Email Required"})
+    const { email } = req.body;
+    if (!email) {
+      return res.json({ success: false, message: "Email Required" });
     }
-    const buyer=await Buyer.findOne({email});
-    if(!buyer){
-      return res.json({success:false,message:"Buyer Not Found"});
+
+    const buyer = await Buyer.findOne({ email });
+    if (!buyer) {
+      return res.json({ success: false, message: "Buyer Not Found" });
     }
-    if(buyer.isVerified){
-      return res.json({success:false,message:"UserVerified Login Please!"})
+
+    if (buyer.isVerified) {
+      return res.json({ success: false, message: "User Verified. Login Please!" });
     }
+
+    // Rate limiting: 60 seconds
     if (
       buyer.lastVerificationSent &&
       Date.now() - buyer.lastVerificationSent < 60000
     ) {
       return res.status(429).json({
         success: false,
-        message: "Please wait before requesting again"
+        message: "Please wait 60 seconds before requesting again"
       });
     }
 
-     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 8. Save new code + timestamp
+    // Update buyer record
     buyer.verificationCode = newCode;
     buyer.verificationExpires = Date.now() + 10 * 60 * 1000;
-    buyer.lastVerificationSent = Date.now(); 
+    buyer.lastVerificationSent = Date.now();
     await buyer.save();
 
-
-    // 9. Send email
+    // FIXED: Use buyer.name and newCode (matching your variables)
     const { error } = await resend.emails.send({
       from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
       subject: "Your New Verification Code",
-      html: verifyEmailTemplate(name, code),
+      html: verifyEmailTemplate(buyer.name || "Valued Buyer", newCode), 
     });
+
+    if (error) {
+      console.error("Resend Error:", error);
+      return res.json({ success: false, message: "Email service failed" });
+    }
 
     return res.json({
       success: true,
@@ -389,10 +397,10 @@ app.post("/api/buyer-resend-verification",async(req,res)=>{
     });
 
   } catch (error) {
-    console.log(error);
-    res.json({success:false,message:"Resending Email Error"})
+    console.error("Full Error Stack:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
-})
+});
 
 app.post("/api/seller-resend-verification",async(req,res)=>{
   try {
