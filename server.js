@@ -497,37 +497,60 @@ app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
 app.post("/api/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
 
-    // 1. Find user in either collection
-    let buyer = await Buyer.findOne({ email });
-
-    if (!Buyer) {
-      return res.json({ success: false, message: "No account found with this email" });
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
     }
 
-    // 2. Generate 6-digit reset code
-    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // 1. Find buyer
+    const buyer = await Buyer.findOne({ email });
 
-    // 3. Save to DB with short expiry (e.g., 5 minutes)
+    if (!buyer) {
+      return res.json({
+        success: false,
+        message: "No account found with this email"
+      });
+    }
+
+    // 2. Generate OTP
+    const resetCode = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+
+    // 3. Save OTP
     buyer.verificationCode = resetCode;
     buyer.verificationExpires = Date.now() + 5 * 60 * 1000;
     await buyer.save();
 
-    // 4. Send Email
+    // 4. Safe name fallback
+    const name = buyer.name || "User";
+
+    // 5. Send email
     await resend.emails.send({
-      from: 'Isonga Market <noreply@isongamarket.com>',
+      from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
-      subject: 'Reset your Isonga Market Password',
-      html: verifyEmailTemplate(name, code),
+      subject: "Reset your Isonga Market Password",
+      html: verifyEmailTemplate(name, resetCode),
     });
 
-    res.json({ success: true, message: "Reset code sent to your email" });
+    res.json({
+      success: true,
+      message: "Reset code sent to your email"
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error sending email" });
+    console.error("Forgot password error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Error sending email"
+    });
   }
 });
 
