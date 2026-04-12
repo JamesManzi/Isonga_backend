@@ -26,8 +26,10 @@ const app = express();
 app.set("trust proxy", 1);
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim())
-  : ["https://isongamarket.com"];
-
+  : [
+      "https://isongamarket.com",
+      "https://www.isongamarket.com"
+    ];
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
@@ -86,11 +88,14 @@ const emailLimiter = rateLimit({
     success: false,
     message: "Too many login attempts for this account"
   },
- keyGenerator: (req) => req.body?.email?.toLowerCase() || "unknown",
+ keyGenerator: (req) => {
+  if (!req.body?.email) return req.ip;
+  return req.body.email.toLowerCase();
+}
 });
-
+app.use("/api", ipLimiter);
 // Store Uploads
-const { upload } = require('./cloudinary');
+const { cloudinary, upload } = require("./cloudinary");
 
 const auth = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -149,7 +154,7 @@ app.post("/api/register", upload.fields([
 
     // 4. Send Email via Resend
     const { data, error } = await resend.emails.send({
-      from: 'Isonga Market <onboarding@resend.dev>',
+      from: 'Isonga Market <noreply@isongamarket.com>',
       to: email,
       subject: 'Verify your Isonga Seller Account',
       html: `
@@ -257,7 +262,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     const { data, error } = await resend.emails.send({
       from: 'Isonga Market <onboarding@resend.dev>', // Use this default sender for testing
       to: email,
-      subject: 'Verify your Isonga Market Account',
+      subject: 'Verify your Isonga Buyer Account',
       html: `<strong>Welcome ${name}!</strong><p>Your verification code is: <b>${code}</b></p>`
     });
 
@@ -678,9 +683,7 @@ app.get("/api/my_store", auth, async (req, res) => {
   }
 })
 
-// --- SELLER PASSWORD RECOVERY ROUTES ---
 
-// STEP 1: Send code specifically for Sellers
 app.post("/api/seller/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
@@ -1145,21 +1148,45 @@ app.put("/api/ratings/:id/reply", auth, async (req, res) => {
   }
 });
 
-app.delete("/api/delete_location_image/:filename", auth, async (req, res) => {
+app.delete("/api/delete_location_image/:public_id", auth, async (req, res) => {
   try {
+    const { public_id } = req.params;
 
-    const { filename } = req.params;
+    const seller = await Seller.findById(req.userId);
 
+    if (!seller) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller Not Found"
+      });
+    }
+
+    // 1. Delete from Cloudinary
+    await cloudinary.uploader.destroy(public_id, {
+      resource_type: "image"
+    });
+
+    // 2. Remove from MongoDB
     await Seller.findByIdAndUpdate(
       req.userId,
-      { $pull: { files: filename } }
+      {
+        $pull: {
+          files: { public_id }
+        }
+      }
     );
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      message: "Image deleted successfully"
+    });
 
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false });
+    console.log("DELETE ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 });
 
