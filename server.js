@@ -612,9 +612,9 @@ app.post("/api/forgot-password", async (req, res) => {
     const { email } = req.body;
 
     // 1. Find user in either collection
-    let user = await Buyer.findOne({ email }) || await Seller.findOne({ email });
+    let buyer = await Buyer.findOne({ email });
 
-    if (!user) {
+    if (!Buyer) {
       return res.json({ success: false, message: "No account found with this email" });
     }
 
@@ -622,13 +622,13 @@ app.post("/api/forgot-password", async (req, res) => {
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     // 3. Save to DB with short expiry (e.g., 5 minutes)
-    user.verificationCode = resetCode;
-    user.verificationExpires = Date.now() + 5 * 60 * 1000;
-    await user.save();
+    buyer.verificationCode = resetCode;
+    buyer.verificationExpires = Date.now() + 5 * 60 * 1000;
+    await buyer.save();
 
     // 4. Send Email
     await resend.emails.send({
-      from: 'Isonga Market <onboarding@resend.dev>',
+      from: 'Isonga Market <noreply@isongamarket.com>',
       to: email,
       subject: 'Reset your Isonga Market Password',
       html: `<h3>Password Reset Request</h3>
