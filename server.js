@@ -404,26 +404,33 @@ app.post("/api/verify-email", async (req, res) => {
     const { email, code } = req.body;
     const inputCode = String(code).trim();
 
-    let user = await Buyer.findOne({ email, verificationCode: inputCode });
-    let modelType = "Buyer";
+    let user = await Buyer.findOne({ email });
+let modelType = "Buyer";
 
-    if (!user) {
-      return res.json({ success: false, message: "Invalid code" });
-    }
+if (!user) {
+  user = await Seller.findOne({ email });
+  modelType = "Seller";
+}
 
-    // 3. Check Expiry
-    if (user.verificationExpires < Date.now()) {
-      return res.json({ success: false, message: "Code expired" });
-    }
+if (!user) {
+  return res.json({ success: false, message: "User not found" });
+}
 
-    // 4. Success Logic - Update the specific document found
-    user.isVerified = true;
-    user.verificationCode = null;
-    user.verificationExpires = null;
-    await user.save();
+if (user.verificationCode !== inputCode) {
+  return res.json({ success: false, message: "Invalid code" });
+}
 
-    console.log(` ${modelType} verified successfully: ${email}`);
-    res.json({ success: true, message: `${modelType} verified successfully` });
+if (user.verificationExpires < Date.now()) {
+  return res.json({ success: false, message: "Code expired" });
+}
+
+// success
+user.isVerified = true;
+user.verificationCode = null;
+user.verificationExpires = null;
+await user.save();
+
+res.json({ success: true });
 
   } catch (error) {
     console.error(" Verify Error:", error);
