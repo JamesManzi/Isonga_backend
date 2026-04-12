@@ -20,7 +20,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const Notification = require("./models/Notification");
 const rateLimit = require("express-rate-limit");
 const Conversation = require("./models/Conversation");
- import { verifyEmailTemplate } from "./utils/emailTemplates.js";
+import verifyEmailTemplate from "./utils/emailTemplates.js";
 // Creating App
 const app = express();
 
