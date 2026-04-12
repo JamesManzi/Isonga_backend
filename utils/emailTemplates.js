@@ -1,4 +1,4 @@
-export function verifyEmailTemplate(name, code) {
+function verifyEmailTemplate(name, code) {
   return `
     <div style="font-family: Arial; background:#f9fafb; padding:20px;">
       <div style="max-width:500px; margin:auto; background:white; padding:20px; border-radius:8px;">
@@ -29,3 +29,5 @@ export function verifyEmailTemplate(name, code) {
     </div>
   `;
 }
+
+export default verifyEmailTemplate;
