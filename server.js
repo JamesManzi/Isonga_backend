@@ -408,21 +408,6 @@ app.post("/api/verify-email", async (req, res) => {
     let modelType = "Buyer";
 
     if (!user) {
-      user = await Seller.findOne({ email, verificationCode: inputCode });
-      modelType = "Seller";
-    }
-
-    // 2. If NO user in either collection has that code
-    if (!user) {
-      // DEBUG: Let's see what's actually in the DB for this email
-      const bTest = await Buyer.findOne({ email });
-      const sTest = await Seller.findOne({ email });
-
-      console.log(`--- Verification Failed for ${email} ---`);
-      console.log(`Input Code: ${inputCode}`);
-      console.log(`Buyer Code in DB: ${bTest?.verificationCode || "None"}`);
-      console.log(`Seller Code in DB: ${sTest?.verificationCode || "None"}`);
-
       return res.json({ success: false, message: "Invalid code" });
     }
 
