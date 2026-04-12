@@ -30,4 +30,4 @@ function verifyEmailTemplate(name, code) {
   `;
 }
 
-export default verifyEmailTemplate;
+module.exports = verifyEmailTemplate;
