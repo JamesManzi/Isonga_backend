@@ -426,45 +426,33 @@ app.post("/api/seller-verify-email",async(req,res)=>{
     res.json({success:false,message:"Email Verifying Error"});
   }
 })
-app.post("/api/verify-email", async (req, res) => {
+
+app.post("/api/buyer-verify-email",async(req,res)=>{
   try {
-    const { email, code } = req.body;
-    const inputCode = String(code).trim();
+    const{email,code}=req.body;
+    const inputCode=String(code).trim();
+    let buyer=await Buyer.findOne({email});
+    if(!buyer){
+      return res.json({success:false,message:"Buyer Not Found"});
+    }
 
-    let user = await Buyer.findOne({ email });
-let modelType = "Buyer";
+    if(buyer.verificationCode!==inputCode){
+      return res.json({success:false,message:"Invalid Code"});
+    }
+    if(buyer.verificationExpires<Date.now()){
+      return res.json({success:false,message:"Code Expired"});
+    }
 
-if (!user) {
-  user = await Seller.findOne({ email });
-  modelType = "Seller";
-}
-
-if (!user) {
-  return res.json({ success: false, message: "User not found" });
-}
-
-if (user.verificationCode !== inputCode) {
-  return res.json({ success: false, message: "Invalid code" });
-}
-
-if (user.verificationExpires < Date.now()) {
-  return res.json({ success: false, message: "Code expired" });
-}
-
-// success
-user.isVerified = true;
-user.verificationCode = null;
-user.verificationExpires = null;
-await user.save();
-
-res.json({ success: true });
-
+    buyer.isVerified=true;
+    buyer.verificationCode=null;
+    buyer.verificationExpires=null;
+    await buyer.save();
+    res.json({success:true});
   } catch (error) {
-    console.error(" Verify Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    console.log(error);
+    res.json({success:false,message:"Email Server Verifying Error"})
   }
-});
-
+})
 
 app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
   try {
