@@ -248,7 +248,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     if (ExistingBuyer) {
       return res.json({ success: false, message: "User Already Exist" });
     }
-    if(!req.file||!req.file.profile){
+    if(!req.file){
       return res.json({success:false,message:"Profile Image Required"});
     }
     // ... Keep your password regex and hashing logic here ...
