@@ -1,7 +1,6 @@
 {
   "name": "isonga-backend",
   "version": "1.0.0",
-  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,6 +8,7 @@
   },
   "keywords": [],
   "author": "",
+  "type": "commonjs",
   "license": "ISC",
   "dependencies": {
     "are": "^0.0.1",
