@@ -376,6 +376,8 @@ app.post("/api/buyer-resend-verification", async (req, res) => {
     buyer.verificationCode = newCode;
     buyer.verificationExpires = Date.now() + 10 * 60 * 1000;
     buyer.lastVerificationSent = Date.now();
+
+    buyer.lastVerificationSent = Date.now();
     await buyer.save();
 
     // FIXED: Use buyer.name and newCode (matching your variables)
