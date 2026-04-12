@@ -696,31 +696,52 @@ app.get("/api/my_store", auth, async (req, res) => {
   }
 })
 
-
 app.post("/api/seller/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
+    }
+
     const seller = await Seller.findOne({ email });
 
     if (!seller) {
-      return res.json({ success: false, message: "No seller account found with this email" });
+      return res.json({
+        success: false,
+        message: "No seller account found with this email"
+      });
     }
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
     seller.verificationCode = resetCode;
     seller.verificationExpires = Date.now() + 5 * 60 * 1000;
     await seller.save();
 
+    const name = seller.name || "Seller";
+
     await resend.emails.send({
-      from: 'Isonga Market <noreply@isongamarket.com>',
+      from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
-      subject: 'Seller Password Reset',
-      html: verifyEmailTemplate(name, code),
+      subject: "Seller Password Reset",
+      html: verifyEmailTemplate(name, resetCode),
     });
 
-    res.json({ success: true, message: "Code sent to seller email" });
+    res.json({
+      success: true,
+      message: "Code sent to seller email"
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error sending email" });
+    console.error("Forgot password error:", error); // 🔥 IMPORTANT
+    res.status(500).json({
+      success: false,
+      message: "Error sending email"
+    });
   }
 });
 
