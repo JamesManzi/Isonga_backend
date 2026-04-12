@@ -256,7 +256,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
       from: 'Isonga Market <noreply@isongamarket.com>', // Use this default sender for testing
       to: email,
       subject: 'Verify your Isonga Buyer Account',
-      html: `<strong>Welcome ${name}!</strong><p>Your verification code is: <b>${code}</b></p>`
+      html: verifyEmailTemplate(name, code),
     });
 
     if (error) {
@@ -380,18 +380,9 @@ app.post("/api/buyer-resend-verification",async(req,res)=>{
       from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
       subject: "Your New Verification Code",
-      html: `
-        <div style="font-family: sans-serif; padding: 20px;">
-          <h2>Isonga Market</h2>
-          <p>Hello ${buyer.name || "User"},</p>
-          <p>Your new verification code is:</p>
-          <h1>${newCode}</h1>
-          <p>This code expires in 10 minutes.</p>
-        </div>
-      `
+      html: verifyEmailTemplate(name, code),
     });
 
-    // 11. Success
     return res.json({
       success: true,
       message: "New verification code sent successfully!"
@@ -440,15 +431,7 @@ app.post("/api/seller-resend-verification",async(req,res)=>{
       from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
       subject: "Your New Verification Code",
-      html: `
-        <div style="font-family: sans-serif; padding: 20px;">
-          <h2>Isonga Market</h2>
-          <p>Hello ${seller.name || "User"},</p>
-          <p>Your new verification code is:</p>
-          <h1>${newCode}</h1>
-          <p>This code expires in 10 minutes.</p>
-        </div>
-      `
+      html: verifyEmailTemplate(name, code),
     });
 
     // 11. Success
@@ -520,9 +503,7 @@ app.post("/api/forgot-password", async (req, res) => {
       from: 'Isonga Market <noreply@isongamarket.com>',
       to: email,
       subject: 'Reset your Isonga Market Password',
-      html: `<h3>Password Reset Request</h3>
-             <p>Use this code to reset your password: <b>${resetCode}</b></p>
-             <p>This code expires in 5 minutes.</p>`
+      html: verifyEmailTemplate(name, code),
     });
 
     res.json({ success: true, message: "Reset code sent to your email" });
@@ -715,7 +696,7 @@ app.post("/api/seller/forgot-password", async (req, res) => {
       from: 'Isonga Market <noreply@isongamarket.com>',
       to: email,
       subject: 'Seller Password Reset',
-      html: `<p>Your seller reset code is: <b>${resetCode}</b></p>`
+      html: verifyEmailTemplate(name, code),
     });
 
     res.json({ success: true, message: "Code sent to seller email" });
