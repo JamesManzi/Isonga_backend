@@ -1,4 +1,4 @@
-const dns = require('node:dns');
+import * as dns from "node:dns";
 dns.setDefaultResultOrder('ipv4first');
 const express = require("express");
 const mongoose = require("mongoose");
