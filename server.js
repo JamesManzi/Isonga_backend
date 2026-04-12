@@ -415,14 +415,15 @@ app.post("/api/seller-verify-email",async(req,res)=>{
       return res.json({success:false,message:"Code Expired"});
     }
 
-    seller.isVerified=true,
-    seller.verificationCode=null,
-    seller.verificationExpires=null,
+    seller.isVerified=true;
+    seller.verificationCode=null;
+    seller.verificationExpires=null;
 
     await seller.save();
-    res.json({sucess:true});
+    res.json({success:true});
   } catch (error) {
-    console.log("email error",error)
+    console.log("email error",error);
+    res.json({success:false,message:"Email Verifying Error"});
   }
 })
 app.post("/api/verify-email", async (req, res) => {
