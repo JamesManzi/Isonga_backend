@@ -399,6 +399,32 @@ app.post("/api/resend-verification", async (req, res) => {
   }
 });
 
+app.post("/api/seller-verify-email",async(req,res)=>{
+  try {
+    const {email,code}=req.body;
+    const inputCode=String(code).trim();
+    let seller=await Seller.findOne({email});
+    if(!seller){
+      return res.json({success:false,message:"Seller  Not Found"});
+    }
+
+    if(seller.verificationCode!==inputCode){
+      return res.json({success:false,message:"Invalid Code"});
+    }
+    if(seller.verificationExpires<Date.now()){
+      return res.json({success:false,message:"Code Expired"});
+    }
+
+    seller.isVerified=true,
+    seller.verificationCode=null,
+    seller.verificationExpires=null,
+
+    await seller.save();
+    res.json({sucess:true});
+  } catch (error) {
+    console.log("email error",error)
+  }
+})
 app.post("/api/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
