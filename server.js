@@ -488,13 +488,13 @@ app.post("/api/buyer-resend-verification",async(req,res)=>{
 
     // 9. Send email
     const { error } = await resend.emails.send({
-      from: "Isonga Market <onboarding@resend.dev>",
+      from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
       subject: "Your New Verification Code",
       html: `
         <div style="font-family: sans-serif; padding: 20px;">
           <h2>Isonga Market</h2>
-          <p>Hello ${user.name || "User"},</p>
+          <p>Hello ${buyer.name || "User"},</p>
           <p>Your new verification code is:</p>
           <h1>${newCode}</h1>
           <p>This code expires in 10 minutes.</p>
