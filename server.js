@@ -402,19 +402,23 @@ app.post("/api/buyer-resend-verification", async (req, res) => {
   }
 });
 
-app.post("/api/seller-resend-verification",async(req,res)=>{
+app.post("/api/seller-resend-verification", async (req, res) => {
   try {
-    const {email}=req.body;
-    if(!email){
-      return res.json({success:false,message:"Email Required"})
+    const { email } = req.body;
+    if (!email) {
+      return res.json({ success: false, message: "Email Required" });
     }
-    const seller=await Seller.findOne({email});
-    if(!seller){
-      return res.json({success:false,message:"Seller Not Found"});
+
+    const seller = await Seller.findOne({ email });
+    if (!seller) {
+      return res.json({ success: false, message: "Seller Not Found" });
     }
-    if(seller.isVerified){
-      return res.json({success:false,message:"UserVerified Login Please!"})
+
+    if (seller.isVerified) {
+      return res.json({ success: false, message: "User Verified. Login Please!" });
     }
+
+    // Rate limiting check
     if (
       seller.lastVerificationSent &&
       Date.now() - seller.lastVerificationSent < 60000
@@ -425,33 +429,40 @@ app.post("/api/seller-resend-verification",async(req,res)=>{
       });
     }
 
-     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate new code
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 8. Save new code + timestamp
+    // Update seller record
     seller.verificationCode = newCode;
     seller.verificationExpires = Date.now() + 10 * 60 * 1000;
     seller.lastVerificationSent = Date.now(); 
     await seller.save();
 
-
-    // 9. Send email
+    // Send email using the CORRECT variables
     const { error } = await resend.emails.send({
       from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
       subject: "Your New Verification Code",
-      html: verifyEmailTemplate(name, code),
+      // FIXED: Using seller.name and the newCode variable defined above
+      html: verifyEmailTemplate(seller.name || "Seller", newCode), 
     });
 
-    // 11. Success
+    if (error) {
+      console.error("Resend Email Error:", error);
+      return res.status(500).json({ success: false, message: "Email service failed" });
+    }
+
     return res.json({
       success: true,
       message: "New verification code sent successfully!"
     });
+
   } catch (error) {
-    console.log(error);
-    res.json({success:false,message:"Resending Email Error"})
+    console.error("Resend Route Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
-})
+});
+
 app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
