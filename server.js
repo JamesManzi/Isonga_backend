@@ -260,7 +260,7 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
 
     // SEND EMAIL USING API (NOT SMTP)
     const { data, error } = await resend.emails.send({
-      from: 'Isonga Market <onboarding@resend.dev>', // Use this default sender for testing
+      from: 'Isonga Market <noreply@isongamarket.com>', // Use this default sender for testing
       to: email,
       subject: 'Verify your Isonga Buyer Account',
       html: `<strong>Welcome ${name}!</strong><p>Your verification code is: <b>${code}</b></p>`
