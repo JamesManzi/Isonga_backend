@@ -20,6 +20,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const Notification = require("./models/Notification");
 const rateLimit = require("express-rate-limit");
 const Conversation = require("./models/Conversation");
+ import { verifyEmailTemplate } from "./utils/emailTemplates.js";
 // Creating App
 const app = express();
 
@@ -153,21 +154,13 @@ app.post("/api/register", upload.fields([
     console.log(` Sending Seller Verification to: ${email}`);
 
     // 4. Send Email via Resend
-    const { data, error } = await resend.emails.send({
-      from: 'Isonga Market <noreply@isongamarket.com>',
-      to: email,
-      subject: 'Verify your Isonga Seller Account',
-      html: `
-                <div style="font-family: sans-serif; padding: 20px;">
-                    <h1 style="color: #2563eb;">Welcome to Isonga Market, ${name}!</h1>
-                    <p>To start selling, please verify your email using this code:</p>
-                    <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1e293b; padding: 10px; background: #f1f5f9; display: inline-block;">
-                        ${code}
-                    </div>
-                    <p>This code expires in 10 minutes.</p>
-                </div>
-            `
-    });
+
+const { data, error } = await resend.emails.send({
+  from: "Isonga Market <noreply@isongamarket.com>",
+  to: email,
+  subject: "Verify your account",
+  html: verifyEmailTemplate(name, code),
+});
     console.log(" API Email sent:", data.id);
     if (error) {
       console.error(" Resend Error:", error);
@@ -543,8 +536,7 @@ app.post("/api/reset-password", async (req, res) => {
     const { email, code, newPassword } = req.body;
 
     // 1. Find the user with that specific code
-    let user = await Buyer.findOne({ email, verificationCode: code }) ||
-      await Seller.findOne({ email, verificationCode: code });
+    let user = await Buyer.findOne({ email, verificationCode: code });
 
     if (!user) {
       return res.json({ success: false, message: "Invalid or expired code" });
