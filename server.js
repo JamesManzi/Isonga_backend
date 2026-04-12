@@ -824,7 +824,7 @@ app.post("/api/seller/forgot-password", async (req, res) => {
     await seller.save();
 
     await resend.emails.send({
-      from: 'Isonga Market <onboarding@resend.dev>',
+      from: 'Isonga Market <noreply@isongamarket.com>',
       to: email,
       subject: 'Seller Password Reset',
       html: `<p>Your seller reset code is: <b>${resetCode}</b></p>`
