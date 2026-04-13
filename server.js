@@ -2188,6 +2188,37 @@ app.post("/api/order", auth, async (req, res) => {
     });
   }
 });
+
+app.post("/api/momo/pay", async (req, res) => {
+  try {
+    const { amount, phone } = req.body;
+
+    if (!amount || !phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing amount or phone"
+      });
+    }
+
+    // Simulate MoMo request (replace with real API later)
+    const referenceId = Date.now().toString();
+
+    console.log("MoMo payment started:", { amount, phone });
+
+    res.json({
+      success: true,
+      message: "Payment request sent",
+      referenceId
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
     // 2. GET SELLER ORDERS
     app.get("/api/seller/orders", auth, async (req, res) => {
       try {
