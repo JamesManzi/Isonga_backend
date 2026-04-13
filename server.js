@@ -499,6 +499,7 @@ app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
 app.post("/api/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
@@ -2097,11 +2098,22 @@ app.get("/api/cart/count", auth, async (req, res) => {
 //  ORDER MANAGEMENT ROUTES
 // ==========================================
 
-// 1. PLACE ORDER (Buyer)
-app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => {
+// 1. PLACE ORDER (Buyer)// 1. Removed upload.single since we aren't uploading a file for digital payments
+app.post("/api/order", auth, async (req, res) => {
   try {
     const buyerId = req.userId;
-    const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
+    // 2. Added momoTransactionId and isPaid to the destructuring
+    const { 
+      name, 
+      phone, 
+      address, 
+      deliveryMethod, 
+      paymentMethod, 
+      notes, 
+      deliveryDate,
+      momoTransactionId, 
+      isPaid 
+    } = req.body;
 
     // Fetch the buyer's current cart
     const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
@@ -2109,10 +2121,9 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
       return res.status(400).json({ success: false, message: "Cart is empty" });
     }
 
-    // Map cart items to the Order schema format
     const orderItems = cart.items.map(item => ({
       product: item.product._id,
-      seller: item.product.seller, // Assumes Product model has a 'seller' field
+      seller: item.product.seller,
       quantity: item.quantity,
       price: item.price
     }));
@@ -2128,7 +2139,10 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
       deliveryMethod,
       deliveryDate: deliveryDate || null,
       paymentMethod,
-      paymentProof: req.file ? req.file.path : "", // Uses your Cloudinary/Multer setup
+      // 3. Logic: If it's cash, no ID. If it's mobile, save the MoMo ID.
+      momoTransactionId: paymentMethod === "mobile" ? momoTransactionId : null,
+      isPaid: isPaid || false,
+      paymentStatus: isPaid ? "completed" : "unpaid",
       notes,
       status: "Pending"
     });
@@ -2138,25 +2152,30 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
 
     uniqueSellers.forEach(sellerId => {
       const sellerRoom = `Seller_${sellerId}`;
-
-      // Use io.to(sellerRoom) to hit the room, not a specific ID
-      // If 'io' is defined in your main server file, ensure it's accessible here
-      io.to(sellerRoom).emit("newOrderNotification", {
-        message: `New Order from ${name}!`,
-        orderId: newOrder._id,
-        total: cart.totalPrice
-      });
-    }); // <--- YOU WERE MISSING THIS CLOSING BRACE AND PARENTHESIS
+      if (typeof io !== 'undefined') {
+        io.to(sellerRoom).emit("newOrderNotification", {
+          message: `New Order from ${name}!`,
+          orderId: newOrder._id,
+          total: cart.totalPrice,
+          isPaid: newOrder.isPaid // Useful so sellers know if they have the money already
+        });
+      }
+    });
 
     // Clear the cart after successful order
     await Cart.findOneAndDelete({ buyer: buyerId });
 
-    res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
-} catch (error) {
+    res.json({ 
+      success: true, 
+      message: "Order placed successfully!", 
+      orderId: newOrder._id 
+    });
+
+  } catch (error) {
     console.error("Order Creation Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
-  } // <--- Added this to close 'catch'
-}); //
+  }
+});
     // 2. GET SELLER ORDERS
     app.get("/api/seller/orders", auth, async (req, res) => {
       try {
