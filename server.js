@@ -2219,6 +2219,30 @@ app.post("/api/momo/pay", async (req, res) => {
     });
   }
 });
+
+// --- FIX: Add this Status Check Route ---
+app.get("/api/momo/status/:refId", async (req, res) => {
+  try {
+    const { refId } = req.params;
+
+    // For simulation/testing purposes, we will just say it's successful 
+    // after 5 seconds, or just return SUCCESSFUL immediately for now.
+    console.log(`Checking status for transaction: ${refId}`);
+
+    res.json({
+      success: true,
+      status: "SUCCESSFUL", // Change to "PENDING" to test the loading state
+      referenceId: refId
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error checking status"
+    });
+  }
+});
     // 2. GET SELLER ORDERS
     app.get("/api/seller/orders", auth, async (req, res) => {
       try {
