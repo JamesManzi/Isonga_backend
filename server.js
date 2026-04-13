@@ -2097,30 +2097,32 @@ app.get("/api/cart/count", auth, async (req, res) => {
 // ==========================================
 //  ORDER MANAGEMENT ROUTES
 // ==========================================
-
-// 1. PLACE ORDER (Buyer)// 1. Removed upload.single since we aren't uploading a file for digital payments
+// PLACE ORDER (Buyer) - SECURE VERSION
 app.post("/api/order", auth, async (req, res) => {
   try {
     const buyerId = req.userId;
-    // 2. Added momoTransactionId and isPaid to the destructuring
-    const { 
-      name, 
-      phone, 
-      address, 
-      deliveryMethod, 
-      paymentMethod, 
-      notes, 
-      deliveryDate,
-      momoTransactionId, 
-      isPaid 
+
+    const {
+      name,
+      phone,
+      address,
+      deliveryMethod,
+      paymentMethod,
+      notes,
+      deliveryDate
     } = req.body;
 
-    // Fetch the buyer's current cart
+    // 1. Get cart
     const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
+
     if (!cart || cart.items.length === 0) {
-      return res.status(400).json({ success: false, message: "Cart is empty" });
+      return res.status(400).json({
+        success: false,
+        message: "Cart is empty"
+      });
     }
 
+    // 2. Build order items
     const orderItems = cart.items.map(item => ({
       product: item.product._id,
       seller: item.product.seller,
@@ -2128,52 +2130,62 @@ app.post("/api/order", auth, async (req, res) => {
       price: item.price
     }));
 
-    // Create the order
+    // 3. CREATE ORDER (always unpaid initially)
     const newOrder = await Order.create({
       buyer: buyerId,
       items: orderItems,
       totalPrice: cart.totalPrice,
+
       name,
       phone,
       address,
       deliveryMethod,
       deliveryDate: deliveryDate || null,
       paymentMethod,
-      // 3. Logic: If it's cash, no ID. If it's mobile, save the MoMo ID.
-      momoTransactionId: paymentMethod === "mobile" ? momoTransactionId : null,
-      isPaid: isPaid || false,
-      paymentStatus: isPaid ? "completed" : "unpaid",
       notes,
+
+      // ✅ IMPORTANT: NEVER trust frontend payment status
+      momoTransactionId: null,
+      isPaid: false,
+      paymentStatus: "pending",
+
       status: "Pending"
     });
 
-    // Notify involved sellers via Socket.io
+    // 4. Notify sellers (real-time)
     const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
 
     uniqueSellers.forEach(sellerId => {
       const sellerRoom = `Seller_${sellerId}`;
-      if (typeof io !== 'undefined') {
+
+      if (typeof io !== "undefined") {
         io.to(sellerRoom).emit("newOrderNotification", {
           message: `New Order from ${name}!`,
           orderId: newOrder._id,
           total: cart.totalPrice,
-          isPaid: newOrder.isPaid // Useful so sellers know if they have the money already
+          isPaid: false
         });
       }
     });
 
-    // Clear the cart after successful order
+    // 5. Clear cart after order creation
     await Cart.findOneAndDelete({ buyer: buyerId });
 
-    res.json({ 
-      success: true, 
-      message: "Order placed successfully!", 
-      orderId: newOrder._id 
+    // 6. If mobile money → tell frontend to start MoMo payment
+    res.json({
+      success: true,
+      message: "Order created successfully",
+      orderId: newOrder._id,
+      paymentRequired: paymentMethod === "mobile",
+      amount: cart.totalPrice
     });
 
   } catch (error) {
     console.error("Order Creation Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: "Server Error"
+    });
   }
 });
     // 2. GET SELLER ORDERS
