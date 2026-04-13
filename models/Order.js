@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema(
@@ -56,7 +57,7 @@ const OrderSchema = new mongoose.Schema(
       trim: true
     },
 
-    // 🚚 Delivery
+    //  Delivery
     deliveryMethod: {
       type: String,
       enum: ["standard", "express", "pickup"],
@@ -67,31 +68,17 @@ const OrderSchema = new mongoose.Schema(
       type: Date
     },
 
-    // 💰 Payment
+    //  Payment
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile", "card"],
       default: "cash"
     },
 
-    // ✅ NEW: Digital Payment Fields
-    // We keep paymentProof as optional for 'cash' or legacy support,
-    // but we add momoTransactionId for real payments.
-    momoTransactionId: {
-      type: String,
-      trim: true,
-      default: null
-    },
-
-    paymentStatus: {
-      type: String,
-      enum: ["unpaid", "pending", "completed", "failed"],
-      default: "unpaid"
-    },
-
-    isPaid: {
-      type: Boolean,
-      default: false
+    //  NEW: Payment proof image
+    paymentProof: {
+      type: String, // store file path
+      default: ""
     },
 
     notes: {
@@ -99,17 +86,16 @@ const OrderSchema = new mongoose.Schema(
       default: ""
     },
 
-    // 📊 Status
+    //  Status
     status: {
       type: String,
-      enum: ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"],
+     enum: ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"],
       default: "Pending"
     },
-    
     seen: {
-      type: Boolean,
-      default: false
-    }
+  type: Boolean,
+  default: false
+}
   },
   { timestamps: true }
 );

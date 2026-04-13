@@ -2094,156 +2094,69 @@ app.get("/api/cart/count", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-// ==========================================
-//  ORDER MANAGEMENT ROUTES
-// ==========================================
-// PLACE ORDER (Buyer) - SECURE VERSION
-app.post("/api/order", auth, async (req, res) => {
+
+
+
+app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => {
   try {
     const buyerId = req.userId;
+    const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
 
-    const {
-      name,
-      phone,
-      address,
-      deliveryMethod,
-      paymentMethod,
-      notes,
-      deliveryDate
-    } = req.body;
-
-    // 1. Get cart
+    // Fetch the buyer's current cart
     const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
-
     if (!cart || cart.items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cart is empty"
-      });
+      return res.status(400).json({ success: false, message: "Cart is empty" });
     }
 
-    // 2. Build order items
+    // Map cart items to the Order schema format
     const orderItems = cart.items.map(item => ({
       product: item.product._id,
-      seller: item.product.seller,
+      seller: item.product.seller, // Assumes Product model has a 'seller' field
       quantity: item.quantity,
       price: item.price
     }));
 
-    // 3. CREATE ORDER (always unpaid initially)
+    // Create the order
     const newOrder = await Order.create({
       buyer: buyerId,
       items: orderItems,
       totalPrice: cart.totalPrice,
-
       name,
       phone,
       address,
       deliveryMethod,
       deliveryDate: deliveryDate || null,
       paymentMethod,
+      paymentProof: req.file ? req.file.path : "", // Uses your Cloudinary/Multer setup
       notes,
-
-      // ✅ IMPORTANT: NEVER trust frontend payment status
-      momoTransactionId: null,
-      isPaid: false,
-      paymentStatus: "pending",
-
       status: "Pending"
     });
 
-    // 4. Notify sellers (real-time)
+    // Notify involved sellers via Socket.io
     const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
 
     uniqueSellers.forEach(sellerId => {
       const sellerRoom = `Seller_${sellerId}`;
 
-      if (typeof io !== "undefined") {
-        io.to(sellerRoom).emit("newOrderNotification", {
-          message: `New Order from ${name}!`,
-          orderId: newOrder._id,
-          total: cart.totalPrice,
-          isPaid: false
-        });
-      }
-    });
+      // Use io.to(sellerRoom) to hit the room, not a specific ID
+      // If 'io' is defined in your main server file, ensure it's accessible here
+      io.to(sellerRoom).emit("newOrderNotification", {
+        message: `New Order from ${name}!`,
+        orderId: newOrder._id,
+        total: cart.totalPrice
+      });
+    }); // <--- YOU WERE MISSING THIS CLOSING BRACE AND PARENTHESIS
 
-    // 5. Clear cart after order creation
+    // Clear the cart after successful order
     await Cart.findOneAndDelete({ buyer: buyerId });
 
-    // 6. If mobile money → tell frontend to start MoMo payment
-    res.json({
-      success: true,
-      message: "Order created successfully",
-      orderId: newOrder._id,
-      paymentRequired: paymentMethod === "mobile",
-      amount: cart.totalPrice
-    });
-
-  } catch (error) {
+    res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
+} catch (error) {
     console.error("Order Creation Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server Error"
-    });
-  }
-});
+    res.status(500).json({ success: false, message: "Server Error" });
+  } // <--- Added this to close 'catch'
+}); 
 
-app.post("/api/momo/pay", async (req, res) => {
-  try {
-    const { amount, phone } = req.body;
-
-    if (!amount || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing amount or phone"
-      });
-    }
-
-    // Simulate MoMo request (replace with real API later)
-    const referenceId = Date.now().toString();
-
-    console.log("MoMo payment started:", { amount, phone });
-
-    res.json({
-      success: true,
-      message: "Payment request sent",
-      referenceId
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      message: "Server error"
-    });
-  }
-});
-
-// --- FIX: Add this Status Check Route ---
-app.get("/api/momo/status/:refId", async (req, res) => {
-  try {
-    const { refId } = req.params;
-
-    // For simulation/testing purposes, we will just say it's successful 
-    // after 5 seconds, or just return SUCCESSFUL immediately for now.
-    console.log(`Checking status for transaction: ${refId}`);
-
-    res.json({
-      success: true,
-      status: "SUCCESSFUL", // Change to "PENDING" to test the loading state
-      referenceId: refId
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      message: "Server error checking status"
-    });
-  }
-});
-    // 2. GET SELLER ORDERS
     app.get("/api/seller/orders", auth, async (req, res) => {
       try {
         const sellerId = req.userId;
