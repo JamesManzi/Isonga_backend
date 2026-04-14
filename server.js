@@ -611,6 +611,7 @@ app.post("/api/forgot-password", async (req, res) => {
     });
   }
 });
+
 app.post("/api/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
@@ -827,9 +828,15 @@ app.post("/api/seller/forgot-password", async (req, res) => {
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    seller.verificationCode = resetCode;
-    seller.verificationExpires = Date.now() + 5 * 60 * 1000;
-    await seller.save();
+    await Seller.findOneAndUpdate(
+      {email},
+      {
+        $set:{
+          verificationCode:resetCode,
+          verificationExpires:Date.now() + 5 * 60 * 1000
+        }
+      }
+    );
 
     const name = seller.name || "Seller";
 
@@ -846,7 +853,7 @@ app.post("/api/seller/forgot-password", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Forgot password error:", error); // 🔥 IMPORTANT
+    console.error("Forgot password error:", error); 
     res.status(500).json({
       success: false,
       message: "Error sending email"
@@ -854,7 +861,6 @@ app.post("/api/seller/forgot-password", async (req, res) => {
   }
 });
 
-// STEP 2: Verify code specifically for Sellers
 app.post("/api/seller/verify-reset-code", async (req, res) => {
   const { email, code } = req.body;
   const seller = await Seller.findOne({ email, verificationCode: code });
