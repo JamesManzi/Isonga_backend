@@ -136,28 +136,47 @@ app.post("/api/register", upload.fields([
     // 1. Basic Checks
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
-
+      
+    const profileMaxSize = 5 * 1024 * 1024;
     if (!req.files || !req.files.profile) {
       return res.status(400).json({ success: false, message: "Profile image required" });
     }
-    if (!req.files || !req.files.files || req.files.files.length < 2) {
-      return res.status(400).json({ success: false, message: "Location Images Required" })
-    }
+     const profileFile = req.files.profile[0];
+     if (profileFile.size > profileMaxSize) {
+  return res.json({
+    success: false,
+    message: "Profile image: 5MB Max Allowed"
+  });
+}
+const profile = profileFile.path;
+
+const fileSize = 10 * 1024 * 1024; // 10MB
+
+if (!req.files || !req.files.files || req.files.files.length < 2) {
+  return res.status(400).json({
+    success: false,
+    message: "Location Images Required (min 2)"
+  });
+}
+
+for (let file of req.files.files) {
+  if (file.size > fileSize) {
+    return res.json({
+      success: false,
+      message: `Each file must be under 10MB`
+    });
+  }
+}
+
+// extract paths
+const files = req.files.files.map(f => f.path);
     // 2. Prepare Data
     const hash = await bcrypt.hash(password, 12);
-    const profile=req.files||req.files.profile
-    ?req.files.profile[0].path
-    :"";
-    const files = req.files.files ? req.files.files.map(f => f.path) : [];
-
+   
     // 3. Generate 6-Digit Code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    console.log(` Sending Seller Verification to: ${email}`);
-
-    // 4. Send Email via Resend
-
-const { data, error } = await resend.emails.send({
+   const { data, error } = await resend.emails.send({
   from: "Isonga Market <noreply@isongamarket.com>",
   to: email,
   subject: "Verify Your Isonga Seller account",
@@ -236,7 +255,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
 
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
-    const { name, email, password} = req.body;
+    const { name, email, password,repeat_pass} = req.body;
 
     const ExistingBuyer = await Buyer.findOne({ email });
     if (ExistingBuyer) {
@@ -245,6 +264,23 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     if(!req.file){
       return res.json({success:false,message:"Profile Image Required"});
     }
+    const maxSize = 5 * 1024 * 1024;
+
+    if (req.file.size > maxSize) {
+      return res.json({
+        success: false,
+        message: "Maximum file size is 5MB"
+      });
+    }
+     const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+     if(!rule.test(password)){
+      return res.json({success:false,messa:"Weak Password"})
+     }
+
+     if(password!==repeat_pass){
+      return res.json({success:false,message:"Password Must Much"});
+     }
+     
     // ... Keep your password regex and hashing logic here ...
     const hashed = await bcrypt.hash(password, 12);
     let profile = req.file ? req.file.path : "";
