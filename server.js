@@ -480,16 +480,16 @@ app.post("/api/seller-resend-verification", async (req, res) => {
 
     // Generate new code
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    await Seller.findByIdAndUpdate(
-      {email},
-      {
-        $set:{
-          verificationCode:newCode,
-          verificationExpires: Date.now() + 10 * 60 * 1000,
-          lastVerificationSent:Date.now(),
-        }
-      }
-    );
+    await Seller.findOneAndUpdate(
+  { email },
+  {
+    $set: {
+      verificationCode: newCode,
+      verificationExpires: Date.now() + 10 * 60 * 1000,
+      lastVerificationSent: Date.now(),
+    }
+  }
+);
 
     // Send email using the CORRECT variables
     const { error } = await resend.emails.send({
