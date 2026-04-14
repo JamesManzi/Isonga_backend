@@ -145,7 +145,9 @@ app.post("/api/register", upload.fields([
     }
     // 2. Prepare Data
     const hash = await bcrypt.hash(password, 12);
-    const profile = req.files.profile[0].path;
+    const profile=req.files||req.files.profile
+    ?req.files.profile[0].path
+    :"";
     const files = req.files.files ? req.files.files.map(f => f.path) : [];
 
     // 3. Generate 6-Digit Code
@@ -158,10 +160,9 @@ app.post("/api/register", upload.fields([
 const { data, error } = await resend.emails.send({
   from: "Isonga Market <noreply@isongamarket.com>",
   to: email,
-  subject: "Verify your account",
+  subject: "Verify Your Isonga Seller account",
   html: verifyEmailTemplate(name, code),
 });
-    console.log(" API Email sent:", data.id);
     if (error) {
       console.error(" Resend Error:", error);
       return res.status(500).json({ success: false, message: "Email service failed" });
@@ -179,7 +180,7 @@ const { data, error } = await resend.emails.send({
       description,
       category,
       sellerType,
-      isVerified: false, // Must verify first
+      isVerified: false, 
       verificationCode: code,
       verificationExpires: Date.now() + 10 * 60 * 1000
     });
@@ -196,7 +197,7 @@ const { data, error } = await resend.emails.send({
   }
 });
 
-app.post("/api/login",ipLimiter, emailLimiter, async (req, res) => {
+app.post("/api/login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -249,8 +250,6 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
     let profile = req.file ? req.file.path : "";
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    console.log(" Sending via Resend API to:", email);
-
     // SEND EMAIL USING API (NOT SMTP)
     const { data, error } = await resend.emails.send({
       from: 'Isonga Market <noreply@isongamarket.com>', // Use this default sender for testing
@@ -264,9 +263,6 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
       return res.status(500).json({ success: false, message: "Email failed" });
     }
 
-    console.log(" API Email sent:", data.id);
-
-    // SAVE TO DATABASE
     await Buyer.create({
       name,
       email,
@@ -304,11 +300,17 @@ app.post("/api/seller-verify-email",async(req,res)=>{
       return res.json({success:false,message:"Code Expired"});
     }
 
-    seller.isVerified=true;
-    seller.verificationCode=null;
-    seller.verificationExpires=null;
+    await Seller.findOneAndUpdate(
+      {email},
+      {
+        $set:{
+          isVerified:true,
+          verificationCode:null,
+          verificationExpires:null
+        }
+      }
+    );
 
-    await seller.save();
     res.json({success:true});
   } catch (error) {
     console.log("email error",error);
@@ -331,11 +333,17 @@ app.post("/api/buyer-verify-email",async(req,res)=>{
     if(buyer.verificationExpires<Date.now()){
       return res.json({success:false,message:"Code Expired"});
     }
-
-    buyer.isVerified=true;
-    buyer.verificationCode=null;
-    buyer.verificationExpires=null;
-    await buyer.save();
+    await Buyer.findOneAndUpdate(
+      {email},
+      {
+        $set:{
+          isVerified:true,
+          verificationCode:null,
+          verificationExpires:null
+        }
+      }
+    );
+    
     res.json({success:true});
   } catch (error) {
     console.log(error);
@@ -372,13 +380,16 @@ app.post("/api/buyer-resend-verification", async (req, res) => {
 
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Update buyer record
-    buyer.verificationCode = newCode;
-    buyer.verificationExpires = Date.now() + 10 * 60 * 1000;
-    buyer.lastVerificationSent = Date.now();
-
-    buyer.lastVerificationSent = Date.now();
-    await buyer.save();
+await Buyer.findOneAndUpdate(
+  { email },
+  {
+    $set: {
+      verificationCode: newCode,
+      verificationExpires: Date.now() + 10 * 60 * 1000, // 10 minutes
+      lastVerificationSent: Date.now()
+    }
+  }
+);
 
     // FIXED: Use buyer.name and newCode (matching your variables)
     const { error } = await resend.emails.send({
@@ -433,12 +444,16 @@ app.post("/api/seller-resend-verification", async (req, res) => {
 
     // Generate new code
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Update seller record
-    seller.verificationCode = newCode;
-    seller.verificationExpires = Date.now() + 10 * 60 * 1000;
-    seller.lastVerificationSent = Date.now(); 
-    await seller.save();
+    await Seller.findByIdAndUpdate(
+      {email},
+      {
+        $set:{
+          verificationCode:newCode,
+          verificationExpires: Date.now() + 10 * 60 * 1000,
+          lastVerificationSent:Date.now(),
+        }
+      }
+    );
 
     // Send email using the CORRECT variables
     const { error } = await resend.emails.send({
@@ -526,11 +541,15 @@ app.post("/api/forgot-password", async (req, res) => {
       100000 + Math.random() * 900000
     ).toString();
 
-    // 3. Save OTP
-    buyer.verificationCode = resetCode;
-    buyer.verificationExpires = Date.now() + 5 * 60 * 1000;
-    await buyer.save();
-
+    await Buyer.findOneAndUpdate(
+      {email},
+      {
+        $set:{
+          verificationCode:resetCode,
+          verificationExpires:Date.now() + 5 * 60 * 1000
+        }
+      }
+    )
     // 4. Safe name fallback
     const name = buyer.name || "User";
 
@@ -556,34 +575,51 @@ app.post("/api/forgot-password", async (req, res) => {
     });
   }
 });
-
 app.post("/api/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
 
-    // 1. Find the user with that specific code
-    let user = await Buyer.findOne({ email, verificationCode: code });
+    const inputCode = String(code).trim();
+
+    // 1. Find user first (to validate)
+    const user = await Buyer.findOne({ email });
 
     if (!user) {
-      return res.json({ success: false, message: "Invalid or expired code" });
+      return res.json({ success: false, message: "User not found" });
     }
 
-    // 2. Check if code is expired
+    if (user.verificationCode !== inputCode) {
+      return res.json({ success: false, message: "Invalid code" });
+    }
+
     if (user.verificationExpires < Date.now()) {
       return res.json({ success: false, message: "Code expired" });
     }
 
-    // 3. Hash new password and save
-    const salt = await bcrypt.genSalt(12);
-    user.password = await bcrypt.hash(newPassword, salt);
+    if (!newPassword || newPassword.length < 6) {
+      return res.json({ success: false, message: "Password too short" });
+    }
 
-    // 4. Clear reset fields so code can't be used again
-    user.verificationCode = null;
-    user.verificationExpires = null;
-    await user.save();
+    // 2. Hash password
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // 3. Update using findOneAndUpdate
+    await Buyer.findOneAndUpdate(
+      { email },
+      {
+        $set: {
+          password: hashedPassword,
+          verificationCode: null,
+          verificationExpires: null
+        }
+      }
+    );
 
     res.json({ success: true, message: "Password updated successfully!" });
+
   } catch (error) {
+    console.log("reset error:", error);
     res.status(500).json({ success: false, message: "Reset failed" });
   }
 });
@@ -604,25 +640,36 @@ app.post("/api/add_product", upload.array("files", 10), auth, async (req, res) =
 
     const { type, name, price, location, category, description, quantity } = req.body;
 
-    let files = [];
-    if (req.files.length > 10) {
-      return res.json({ success: false, message: "Max Upload Must Be 10" });
-    }
-    if (req.files && req.files.length > 0) {
-      files = req.files.map(file => file.path);
-    }
+   let files = [];
 
-    await Product.create({
-      seller: req.userId,
-      type,
-      name,
-      price,
-      location,
-      category,
-      description,
-      quantity,
-      files
-    });
+const maxSize = 10 * 1024 * 1024; // 10MB
+
+// 2. Check individual file sizes
+if (req.files && req.files.length > 0) {
+  for (let file of req.files) {
+    if (file.size > maxSize) {
+      return res.json({ 
+        success: false, 
+        message: `File ${file.originalname} is too large. Max 10MB per file.` 
+      });
+    }
+  }
+
+  // 3. If all sizes are okay, map the paths
+  files = req.files.map(file => file.path);
+}
+
+await Product.create({
+  seller: req.userId,
+  type,
+  name,
+  price,
+  location,
+  category,
+  description,
+  quantity,
+  files // Array of paths
+});
 
     res.json({
       success: true,
