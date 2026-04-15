@@ -24,11 +24,6 @@ const productSchema = new mongoose.Schema({
     required:true
   },
 
-  location:{
-    type:String,
-    required:true
-  },
-
   files:[
     {
       type:String,
@@ -36,10 +31,6 @@ const productSchema = new mongoose.Schema({
     }
   ],
 
-  category:{
-    type:String,
-    required:true
-  },
 
   description:{
     type:String,

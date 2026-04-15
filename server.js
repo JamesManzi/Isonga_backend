@@ -675,7 +675,7 @@ app.post("/api/verify-reset-code", async (req, res) => {
 app.post("/api/add_product", upload.array("files", 10), auth, async (req, res) => {
   try {
 
-    const { type, name, price, location, category, description, quantity } = req.body;
+    const { type, name, price, description, quantity } = req.body;
 
    let files = [];
 
