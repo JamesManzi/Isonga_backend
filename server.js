@@ -939,7 +939,7 @@ app.get("/api/seller_profile", auth, async (req, res) => {
 
 app.get("/api/buyer_dashboard", auth, async (req, res) => {
   try {
-    // 1. Fetch Buyer (Ensure you only select what the frontend needs)
+    
     const buyer = await Buyer.findById(req.userId).select("name profile");
 
     if (!buyer) {
@@ -970,7 +970,6 @@ app.get("/api/buyer_dashboard", auth, async (req, res) => {
       })
     );
 
-    // 4. Send response in the exact format your Frontend useEffect expects
     res.json({
       success: true,
       buyer: {
@@ -1001,7 +1000,6 @@ app.get("/api/view_profile/:id", auth, async (req, res) => {
       return res.json({ success: false, message: "Seller not found" });
     }
 
-    //  POPULATE BUYER NAME
     const ratings = await Rating.find({ seller: sellerId })
       .populate("buyer", "name profile");
 
@@ -1154,7 +1152,7 @@ app.delete("/api/products/delete/:productId", auth, async (req, res) => {
       return res.status(404).json({ success: false, message: "Product Not Found" });
     }
 
-    // Optional: check seller ownership
+
     if (product.seller.toString() !== req.userId) {
       return res.status(403).json({ success: false, message: "You can only delete your own products" });
     }
@@ -1338,12 +1336,21 @@ app.delete("/api/delete_location_image/:public_id", auth, async (req, res) => {
     });
   }
 });
-
 app.get("/api/product_views", auth, async (req, res) => {
   try {
-    const products = await Product.find({ seller: req.userId });
+    const result = await Product.aggregate([
+      {
+        $match: { seller: req.userId } // filter seller's products
+      },
+      {
+        $group: {
+          _id: null,
+          totalViews: { $sum: "$views" }
+        }
+      }
+    ]);
 
-    const totalViews = products.reduce((sum, p) => sum + p.views, 0);
+    const totalViews = result.length > 0 ? result[0].totalViews : 0;
 
     res.json({
       success: true,
@@ -1351,8 +1358,11 @@ app.get("/api/product_views", auth, async (req, res) => {
     });
 
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false });
+    console.log("PRODUCT VIEWS ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error"
+    });
   }
 });
 
@@ -2084,7 +2094,7 @@ app.post("/api/cart/add", auth, async (req, res) => {
     const buyerId = req.userId;
 
     if (!buyerId) {
-      return res.status(401).json({ success: false, message: "Please login to add items to cart" });
+      return res.status(401).json({ success: false, message: "Buyer Not Found" });
     }
 
     const product = await Product.findById(productId);
@@ -2134,21 +2144,27 @@ app.get("/api/cart", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
 app.put("/api/cart/update", auth, async (req, res) => {
   try {
-
     const { productId, quantity } = req.body;
 
-    const cart = await Cart.findOne({ buyer: req.userId });
+    if (quantity < 1) {
+      return res.json({ success: false, message: "Invalid quantity" });
+    }
 
-    if (!cart) return res.json({ success: false });
+    const cart = await Cart.findOne({ buyer: req.userId });
+    if (!cart) return res.json({ success: false, message: "Cart not found" });
 
     const item = cart.items.find(
       i => i.product.toString() === productId
     );
+    if (!item) return res.json({ success: false, message: "Item not found" });
 
-    if (!item) return res.json({ success: false });
+    // Check stock
+    const product = await Product.findById(productId);
+    if (!product || product.quantity < quantity) {
+      return res.json({ success: false, message: "Insufficient stock" });
+    }
 
     item.quantity = quantity;
 
@@ -2191,7 +2207,6 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
     const buyerId = req.userId;
     const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
 
-    // Fetch the buyer's current cart
     const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ success: false, message: "Cart is empty" });
@@ -2713,39 +2728,41 @@ res.json({ success: true, booking: updatedBooking });
         });
       }
     });
+app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req, res) => {
+  try {
+    const buyerId = req.userId;
 
-    app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req, res) => {
+    let updateData = {
+      name: req.body.name
+    };
 
-      try {
+    // password update
+    if (req.body.password) {
+      updateData.password = await bcrypt.hash(req.body.password, 12);
+    }
 
-        const buyerId = req.userId;
+    // profile image update
+    if (req.file) {
+      updateData.profile = req.file.path;
+    }
 
-        const buyer = await Buyer.findById(buyerId);
+    const buyer = await Buyer.findOneAndUpdate(
+      { _id: buyerId }, 
+      updateData,       
+      { new: true }     
+    );
 
-        if (!buyer) {
-          return res.json({ success: false });
-        }
+    if (!buyer) {
+      return res.json({ success: false });
+    }
 
-        buyer.name = req.body.name;
+    res.json({ success: true, buyer });
 
-        if (req.body.password) {
-          buyer.password = await bcrypt.hash(req.body.password, 10);
-        }
-
-        if (req.file) {
-          buyer.profile = req.file.path;
-        }
-
-        await buyer.save();
-
-        res.json({ success: true, buyer });
-
-      } catch (err) {
-        console.log(err);
-        res.json({ success: false });
-      }
-
-    });
+  } catch (err) {
+    console.log(err);
+    res.json({ success: false });
+  }
+});
     app.delete("/api/cart/remove/:id", auth, async (req, res) => {
       try {
         const buyerId = req.userId;
