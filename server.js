@@ -701,8 +701,6 @@ await Product.create({
   type,
   name,
   price,
-  location,
-  category,
   description,
   quantity,
   files // Array of paths
