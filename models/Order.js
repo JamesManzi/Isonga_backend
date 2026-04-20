@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema(
@@ -30,6 +29,12 @@ const OrderSchema = new mongoose.Schema(
           type: Number,
           required: true,
           min: 0
+        },
+        // ✅ FIX: Added status here so items can be Accepted/Declined individually
+        status: {
+          type: String,
+          enum: ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"],
+          default: "Pending"
         }
       }
     ],
@@ -40,62 +45,38 @@ const OrderSchema = new mongoose.Schema(
       min: 0
     },
 
-    // 👤 Customer Info
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    phone: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    address: {
-      type: String,
-      required: true,
-      trim: true
-    },
+    name: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    address: { type: String, required: true, trim: true },
 
-    //  Delivery
     deliveryMethod: {
       type: String,
       enum: ["standard", "express", "pickup"],
       default: "standard"
     },
 
-    deliveryDate: {
-      type: Date
-    },
+    deliveryDate: { type: Date },
 
-    //  Payment
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile", "card"],
       default: "cash"
     },
 
-    //  NEW: Payment proof image
-    paymentProof: {
-      type: String, // store file path
-      default: ""
-    },
+    paymentProof: { type: String, default: "" },
+    notes: { type: String, default: "" },
 
-    notes: {
-      type: String,
-      default: ""
-    },
-
-    //  Status
+    // ✅ You can keep a top-level status for the overall order if you want,
+    // but your logic currently relies on the item-level status.
     status: {
       type: String,
-     enum: ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"],
+      enum: ["Pending", "Accepted", "Processing", "Shipped", "Delivered", "Cancelled"],
       default: "Pending"
     },
     seen: {
-  type: Boolean,
-  default: false
-}
+      type: Boolean,
+      default: false
+    }
   },
   { timestamps: true }
 );
