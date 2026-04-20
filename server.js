@@ -2309,78 +2309,86 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         res.status(500).json({ success: false, message: "Server Error" });
       }
     });
-
-    app.put("/api/order/status/:id", auth, async (req, res) => {
+app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
-    const id = req.params.id;
+    const orderId = req.params.id;
     const { status } = req.body;
 
-    const item = await Order.findById(id);
+    const order = await Order.findById(orderId);
 
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
     }
 
-    // Check ownership
-    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
-    if (!isOwner) {
-      return res.status(403).json({ success: false, message: "Not authorized" });
+    // 🔒 Only update items that belong to THIS seller
+    let updated = false;
+
+    order.items.forEach(item => {
+      if (item.seller.toString() === sellerId) {
+        if (item.status !== "Pending") return;
+
+        item.status = status;
+        updated = true;
+      }
+    });
+
+    if (!updated) {
+      return res.status(403).json({
+        success: false,
+        message: "No pending items for this seller"
+      });
     }
 
-    // Prevent duplicate updates
-    if (item.status !== "Pending") {
-      return res.json({ success: false, message: `Already ${item.status}` });
-    }
+    await order.save();
 
-    // Update status
-    item.status = status;
-    await item.save();
+    const displayId = order._id.toString().slice(-6).toUpperCase();
 
-    const displayId = item._id.toString().slice(-6).toUpperCase();
     const notificationMessage =
       status === "Accepted"
-        ? ` Your order #${displayId} has been accepted!`
-        : ` Your order #${displayId} was declined.`;
+        ? `Your order #${displayId} item has been accepted!`
+        : `Your order #${displayId} item was declined!`;
 
-    // 1. Create the notification in DB
     const newNotif = await Notification.create({
-      recipient: item.buyer,
+      recipient: order.buyer,
       sender: sellerId,
       message: notificationMessage,
-      orderId: item._id,
+      orderId: order._id,
       read: false,
       category: "Order"
     });
 
-    // 2. CRITICAL: Calculate the REAL unread count for this buyer
     const unreadCount = await Notification.countDocuments({
-      recipient: item.buyer,
+      recipient: order.buyer,
       read: false
     });
 
-    const buyerRoom = `Buyer_${item.buyer}`;
+    const buyerRoom = `Buyer_${order.buyer}`;
 
-    // 3. EMIT: Match the frontend listener name
-    // If your frontend uses socket.on("notification"), change it here:
     io.to(buyerRoom).emit("notification", {
       _id: newNotif._id,
       message: notificationMessage,
-      unreadCount: unreadCount, // Now this has a real value!
-      orderId: item._id,
-      status: status,
+      unreadCount,
+      orderId: order._id,
+      status,
       createdAt: newNotif.createdAt
     });
 
     res.json({
       success: true,
-      message: `Order ${status.toLowerCase()} successfully`,
-      data: item
+      message: `Item ${status.toLowerCase()} successfully`,
+      data: order
     });
 
   } catch (err) {
-    console.error(" Status Update Error:", err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("Status Update Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
   }
 });
     //  Add this route to handle fetching a single order by ID
