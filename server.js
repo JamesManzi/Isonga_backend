@@ -2309,55 +2309,55 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         res.status(500).json({ success: false, message: "Server Error" });
       }
     });
-app.put("/api/order/status/:id", auth, async (req, res) => {
+    app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
-    const sellerId = req.userId;
+    const sellerId = String(req.userId); // Ensure this is a string
     const orderId = req.params.id;
     const { status } = req.body;
 
     const order = await Order.findById(orderId);
 
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found"
-      });
+      return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // 🔒 Only update items that belong to THIS seller
     let updated = false;
 
     order.items.forEach(item => {
-      if (item.seller.toString() === sellerId) {
-        if (item.status !== "Pending") return;
+      // Robust comparison
+      const isOwner = String(item.seller) === sellerId;
+      
+      // Case-insensitive status check
+      const isPending = item.status.toLowerCase() === "pending";
 
-        item.status = status;
+      if (isOwner && isPending) {
+        item.status = status; // e.g., "Accepted" or "Cancelled"
         updated = true;
       }
     });
 
     if (!updated) {
+      // This is exactly why you were getting 403 errors
       return res.status(403).json({
         success: false,
-        message: "No pending items for this seller"
+        message: "Authorization failed or items are no longer pending"
       });
     }
 
+    // Save the changes to the database
     await order.save();
 
+    // --- Notification Logic ---
     const displayId = order._id.toString().slice(-6).toUpperCase();
-
-    const notificationMessage =
-      status === "Accepted"
-        ? `Your order #${displayId} item has been accepted!`
-        : `Your order #${displayId} item was declined!`;
+    const notificationMessage = status === "Accepted" 
+      ? `Your order #${displayId} item has been accepted!` 
+      : `Your order #${displayId} item was declined!`;
 
     const newNotif = await Notification.create({
       recipient: order.buyer,
       sender: sellerId,
       message: notificationMessage,
       orderId: order._id,
-      read: false,
       category: "Order"
     });
 
@@ -2366,16 +2366,18 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
       read: false
     });
 
+    // Socket Emit
     const buyerRoom = `Buyer_${order.buyer}`;
-
-    io.to(buyerRoom).emit("notification", {
-      _id: newNotif._id,
-      message: notificationMessage,
-      unreadCount,
-      orderId: order._id,
-      status,
-      createdAt: newNotif.createdAt
-    });
+    if (global.io) { // Check if io exists to prevent crashes
+      global.io.to(buyerRoom).emit("notification", {
+        _id: newNotif._id,
+        message: notificationMessage,
+        unreadCount,
+        orderId: order._id,
+        status,
+        createdAt: newNotif.createdAt
+      });
+    }
 
     res.json({
       success: true,
@@ -2385,10 +2387,7 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
 
   } catch (err) {
     console.error("Status Update Error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error"
-    });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
     //  Add this route to handle fetching a single order by ID
