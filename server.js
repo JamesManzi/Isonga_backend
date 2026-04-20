@@ -38,7 +38,6 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-
     // IMPORTANT: do NOT throw error
     return callback(null, false);
   },
@@ -128,7 +127,7 @@ mongoose.connect(process.env.MONGO_URL)
 // Seller Register with Email Verification
 app.post("/api/register", upload.fields([
   { name: "profile", maxCount: 1 },
-  { name: "files", maxCount: 5 }
+  { name: "files", maxCount: 6 }
 ]), async (req, res) => {
   try {
     const { name, location, phone, email, password, description, category, sellerType } = req.body;
@@ -2259,21 +2258,35 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
   } // <--- Added this to close 'catch'
 }); 
 
-    app.get("/api/seller/orders", auth, async (req, res) => {
-      try {
-        const sellerId = req.userId;
+app.get("/api/seller/orders", auth, async (req, res) => {
+  try {
+    const sellerId = req.userId;
 
-        // Find orders where at least one item belongs to this seller
-        const orders = await Order.find({ "items.seller": sellerId })
-          .populate("items.product", "name")
-          .sort({ createdAt: -1 });
+    const orders = await Order.find({
+      items: { $elemMatch: { seller: sellerId } }
+    })
+    .populate("items.product", "name")
+    .sort({ createdAt: -1 });
 
-        res.json({ success: true, orders });
-      } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false });
-      }
+    // 🔥 filter ONLY seller items inside each order
+    const filteredOrders = orders.map(order => {
+      const filteredItems = order.items.filter(
+        item => item.seller.toString() === sellerId
+      );
+
+      return {
+        ...order._doc,
+        items: filteredItems
+      };
     });
+
+    res.json({ success: true, orders: filteredOrders });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
+  }
+});
 
     // GET /api/orders/my-orders (For Buyers)
     app.get("/api/orders/my-orders", auth, async (req, res) => {
