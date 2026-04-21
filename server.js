@@ -696,7 +696,7 @@ app.post("/api/add_product", upload.array("files", 10), auth, async (req, res) =
 
    let files = [];
 
-const maxSize = 10 * 1024 * 1024; // 10MB
+const maxSize = 20 * 1024 * 1024; // 20MB
 
 // 2. Check individual file sizes
 if (req.files && req.files.length > 0) {
