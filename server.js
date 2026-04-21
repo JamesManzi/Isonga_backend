@@ -169,6 +169,14 @@ for (let file of req.files.files) {
 
 // extract paths
 const files = req.files.files.map(f => f.path);
+ const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+     if(!rule.test(password)){
+      return res.json({success:false,messa:"Weak Password"})
+     }
+
+     if(password!==repeat_pass){
+      return res.json({success:false,message:"Password Must Much"});
+     }
     // 2. Prepare Data
     const hash = await bcrypt.hash(password, 12);
    
@@ -228,6 +236,9 @@ app.post("/api/login", emailLimiter, async (req, res) => {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
 
+    if(user.isVerified===false){
+      return res.json({success:false,messa:"User Email Not Verified"});
+    }
     //  CREATE TOKEN
     const token = jwt.sign(
       { id: user._id, role: "seller" },
@@ -515,7 +526,7 @@ app.post("/api/seller-resend-verification", async (req, res) => {
   }
 });
 
-app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
+app.post("/api/buyer_login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -527,6 +538,10 @@ app.post("/api/buyer_login",ipLimiter, emailLimiter, async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.json({ success: false, message: "Invalid Credentials" });
+    }
+
+    if(user.isVerified===false){
+      return res.json({success:false,message:"User Email Not Verified"});
     }
 
     const token = jwt.sign(
@@ -631,9 +646,12 @@ app.post("/api/reset-password", async (req, res) => {
     if (user.verificationExpires < Date.now()) {
       return res.json({ success: false, message: "Code expired" });
     }
-
-    if (!newPassword || newPassword.length < 6) {
-      return res.json({ success: false, message: "Password too short" });
+    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+     if(!rule.test(newPassword)){
+      return res.json({success:false,messa:"Weak Password"})
+     }
+    if (!newPassword) {
+      return res.json({ success: false, message: "New Password Required" });
     }
 
     // 2. Hash password
@@ -877,6 +895,10 @@ app.post("/api/seller/reset-password", async (req, res) => {
       return res.json({ success: false, message: "Invalid or expired code" });
     }
 
+    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+     if(!rule.test(newPassword)){
+      return res.json({success:false,messa:"Weak Password"})
+     }
     // 1. Hash it here
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
@@ -2401,7 +2423,7 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         });
       }
     });
-    
+
     //  CORRECTED: MARK ALL NOTIFICATIONS AS READ
     app.put("/api/notifications/mark-read", auth, async (req, res) => {
       try {
