@@ -130,7 +130,7 @@ app.post("/api/register", upload.fields([
   { name: "files", maxCount: 6 }
 ]), async (req, res) => {
   try {
-    const { name, location, phone, email, password, description, category, sellerType } = req.body;
+    const { name, location, phone, email, password, description, category, sellerType,repeat_pass } = req.body;
 
     // 1. Basic Checks
     const existingSeller = await Seller.findOne({ email });
@@ -171,7 +171,7 @@ for (let file of req.files.files) {
 const files = req.files.files.map(f => f.path);
  const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
      if(!rule.test(password)){
-      return res.json({success:false,messa:"Weak Password"})
+      return res.json({success:false,message:"Weak Password"})
      }
 
      if(password!==repeat_pass){
@@ -413,7 +413,7 @@ app.post("/api/buyer-resend-verification", async (req, res) => {
       return res.json({ success: false, message: "User Verified. Login Please!" });
     }
 
-    // Rate limiting: 60 seconds
+    // Rate limiting: 60 seconds 
     if (
       buyer.lastVerificationSent &&
       Date.now() - buyer.lastVerificationSent < 60000
