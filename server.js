@@ -1336,9 +1336,7 @@ app.delete("/api/delete_location_image/:public_id", auth, async (req, res) => {
     await Seller.findByIdAndUpdate(
       req.userId,
       {
-        $pull: {
-          files: { public_id }
-        }
+        $pull: { files: public_id }
       }
     );
 
