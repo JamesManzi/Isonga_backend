@@ -1220,7 +1220,10 @@ app.put(
       if (!seller) {
         return res.json({ success: false, message: "Seller Not Found" });
       }
-
+      const regex = /^(07(8|9|2|3)\d{7})$/;
+     if(!regex.test(phone)){
+      return res.json({success:false,message:"Invalid Phone Number"});
+     }
       //  BASIC DATA
       let updatedData = {
         name: req.body.name,
@@ -1228,13 +1231,6 @@ app.put(
         phone: req.body.phone,
         description: req.body.description
       };
-
-      if(req.body.phone){
-        const regex = /^(07(8|9|2|3)\d{7})$/;
-     if(!regex.test(phone)){
-      return res.json({success:false,message:"Invalid Phone Number"});
-     }
-      }
 
       // =============================
       //  UPDATE PROFILE IMAGE
