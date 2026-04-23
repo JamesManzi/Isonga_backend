@@ -237,7 +237,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     }
 
     if(user.isVerified===false){
-      return res.json({success:false,messa:"User Email Not Verified"});
+      return res.json({success:false,message:"User Email Not Verified"});
     }
     //  CREATE TOKEN
     const token = jwt.sign(
