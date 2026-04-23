@@ -1221,9 +1221,10 @@ app.put(
         return res.json({ success: false, message: "Seller Not Found" });
       }
       const regex = /^(07(8|9|2|3)\d{7})$/;
-     if(!regex.test(phone)){
-      return res.json({success:false,message:"Invalid Phone Number"});
-     }
+
+if (!regex.test(req.body.phone)) {
+  return res.json({ success: false, message: "Invalid Phone Number" });
+}
       //  BASIC DATA
       let updatedData = {
         name: req.body.name,
