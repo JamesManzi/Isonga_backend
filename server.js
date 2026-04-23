@@ -179,6 +179,10 @@ const files = req.files.files.map(f => f.path);
      if(password!==repeat_pass){
       return res.json({success:false,message:"Password Must Much"});
      }
+     const regex = /^(07(8|9|2|3)\d{7})$/;
+     if(!regex.test(phone)){
+      return res.json({success:false,message:"Invalid Phone Number"});
+     }
     // 2. Prepare Data
     const hash = await bcrypt.hash(password, 12);
    
@@ -1224,6 +1228,13 @@ app.put(
         phone: req.body.phone,
         description: req.body.description
       };
+
+      if(req.body.phone){
+        const regex = /^(07(8|9|2|3)\d{7})$/;
+     if(!regex.test(phone)){
+      return res.json({success:false,message:"Invalid Phone Number"});
+     }
+      }
 
       // =============================
       //  UPDATE PROFILE IMAGE
