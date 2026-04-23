@@ -89,7 +89,9 @@ const emailLimiter = rateLimit({
     message: "Too many login attempts for this account"
   },
  keyGenerator: (req) => {
-  if (!req.body?.email) return req.ip;
+  if (!req.body?.email){
+    return ipKeyGenerator(req);
+  }
   return req.body.email.toLowerCase();
 }
 });
@@ -2541,6 +2543,7 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         res.status(500).json({ error: err.message });
       }
     });
+
     app.use((err, req, res, next) => {
       console.error("Global error:", err);
 
@@ -2751,7 +2754,11 @@ app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req,
     }
 
     // profile image update
+    const Max_Size=5*1024*1024;
     if (req.file) {
+      if(req.file.size>Max_Size){
+  return res.json({success:false,message:"Profile is Large Max(5MB"})
+}
       updateData.profile = req.file.path;
     }
 
