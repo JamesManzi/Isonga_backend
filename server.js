@@ -2178,9 +2178,20 @@ app.get("/api/cart", auth, async (req, res) => {
       return res.json({ success: true, cart: null });
     }
 
-    const seller = cart.items[0].product.seller;
+    // ✅ Extract UNIQUE sellers
+    const sellersMap = new Map();
 
-    res.json({ success: true, cart, buyer, seller });
+    cart.items.forEach(item => {
+      const seller = item.product.seller;
+
+      if (seller && !sellersMap.has(seller._id.toString())) {
+        sellersMap.set(seller._id.toString(), seller);
+      }
+    });
+
+    const sellers = Array.from(sellersMap.values());
+
+    res.json({ success: true, cart, buyer, sellers });
 
   } catch (error) {
     console.log(error);
