@@ -483,7 +483,7 @@ app.post("/api/seller-resend-verification", async (req, res) => {
       return res.json({ success: false, message: "User Verified. Login Please!" });
     }
 
-    // Rate limiting check
+    // Rate limiting check 
     if (
       seller.lastVerificationSent &&
       Date.now() - seller.lastVerificationSent < 60000
@@ -613,7 +613,7 @@ app.post("/api/forgot-password", async (req, res) => {
     await resend.emails.send({
       from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
-      subject: "Reset your Isonga Market Password",
+      subject: "Buyer Password Reset",
       html: verifyEmailTemplate(name, resetCode),
     });
 
@@ -2163,6 +2163,7 @@ app.post("/api/cart/add", auth, async (req, res) => {
 app.get("/api/cart", auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.userId).select("profile");
+    const seller=await Seller.findById(req.userId).select("phone");
     const cart = await Cart.findOne({ buyer: req.userId })
       .populate("items.product", "name price files location");
 
