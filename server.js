@@ -2163,11 +2163,14 @@ app.post("/api/cart/add", auth, async (req, res) => {
 app.get("/api/cart", auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.userId).select("profile");
-    const seller=await Seller.findById(req.userId).select("phone");
     const cart = await Cart.findOne({ buyer: req.userId })
       .populate("items.product", "name price files location");
-
-    res.json({ success: true, cart, buyer });
+      if (!cart || cart.items.length === 0) {
+      return res.json({ success: true, cart: null });
+    }
+    const sellerId=cart.items[0].product.seller;
+    const seller=await Seller.findById(sellerId).select("phone");
+    res.json({ success: true, cart, buyer,seller });
   } catch (error) {
     res.status(500).json({ success: false });
   }
