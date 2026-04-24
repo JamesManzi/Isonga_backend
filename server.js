@@ -2163,15 +2163,27 @@ app.post("/api/cart/add", auth, async (req, res) => {
 app.get("/api/cart", auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.userId).select("profile");
+
     const cart = await Cart.findOne({ buyer: req.userId })
-      .populate("items.product", "name price files location");
-      if (!cart || cart.items.length === 0) {
+      .populate({
+        path: "items.product",
+        select: "name price files location seller",
+        populate: {
+          path: "seller",
+          select: "phone"
+        }
+      });
+
+    if (!cart || cart.items.length === 0) {
       return res.json({ success: true, cart: null });
     }
-    const sellerId=cart.items[0].product.seller;
-    const seller=await Seller.findById(sellerId).select("phone");
-    res.json({ success: true, cart, buyer,seller });
+
+    const seller = cart.items[0].product.seller;
+
+    res.json({ success: true, cart, buyer, seller });
+
   } catch (error) {
+    console.log(error);
     res.status(500).json({ success: false });
   }
 });
