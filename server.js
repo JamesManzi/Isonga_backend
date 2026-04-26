@@ -40,9 +40,8 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-     console.log("Blocked origin:", origin);
-    // IMPORTANT: do NOT throw error
-    return callback(null, false);
+    console.log("Blocked origin:", origin);
+    return callback(new Error("Not allowed by CORS"));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -60,13 +59,13 @@ const io = new Server(httpServer, {
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-
-      return callback(null, false);
+      console.log("Blocked origin:", origin);
+    return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   },
-  transports: ["websocket", "polling"]
+  transports: ["websocket"]
 });
 // Define How Data Are Sent
 app.use(express.json());
