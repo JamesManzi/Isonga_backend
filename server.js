@@ -31,6 +31,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       "https://isongamarket.com",
       "https://www.isongamarket.com",
       "http://localhost:5174",
+      "http://localhost:5173",
     ];
 app.use(cors({
   origin: function (origin, callback) {
@@ -39,6 +40,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+     console.log("Blocked origin:", origin);
     // IMPORTANT: do NOT throw error
     return callback(null, false);
   },
