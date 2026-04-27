@@ -65,7 +65,7 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   },
-  transports: ["websocket"]
+  transports: ["websocket", "polling"]
 });
 // Define How Data Are Sent
 app.use(express.json());
