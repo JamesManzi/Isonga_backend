@@ -21,6 +21,7 @@ const Notification = require("./models/Notification");
 const rateLimit = require("express-rate-limit");
 const Conversation = require("./models/Conversation");
 const verifyEmailTemplate = require("./utils/emailTemplates.js");
+const path=require("path");
 // Creating App
 const app = express();
 
@@ -70,6 +71,7 @@ const io = new Server(httpServer, {
 // Define How Data Are Sent
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Login limiter (define FIRST)
 const { ipKeyGenerator } = require('express-rate-limit');
 
@@ -274,7 +276,10 @@ app.post("/api/login", emailLimiter, async (req, res) => {
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
     const { name, email, password,repeat_pass} = req.body;
-
+   if (!name || !email || !password || !repeat_pass) {
+  res.json({ success: false, message: "All Fields Required" });
+  return;
+}
     const ExistingBuyer = await Buyer.findOne({ email });
     if (ExistingBuyer) {
       return res.json({ success: false, message: "User Already Exist" });
@@ -2172,7 +2177,7 @@ app.get("/api/cart", auth, async (req, res) => {
         select: "name price files location seller",
         populate: {
           path: "seller",
-          select: "phone"
+          select: "phone name"
         }
       });
 
@@ -2255,28 +2260,57 @@ app.get("/api/cart/count", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-
-
-
-app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => {
+app.post("/api/order", auth, upload.array("paymentProofs"), async (req, res) => {
   try {
     const buyerId = req.userId;
-    const { name, phone, address, deliveryMethod, paymentMethod, notes, deliveryDate } = req.body;
+    const {
+      name,
+      phone,
+      address,
+      deliveryMethod,
+      paymentMethod,
+      notes,
+      deliveryDate,
+      sellerTotals
+    } = req.body;
 
-    const cart = await Cart.findOne({ buyer: buyerId }).populate("items.product");
+    const cart = await Cart.findOne({ buyer: buyerId }).populate({
+      path: "items.product",
+      populate: { path: "seller", select: "name phone" }
+    });
+
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ success: false, message: "Cart is empty" });
     }
 
-    // Map cart items to the Order schema format
+    // Normalize sellerIds
+    let sellerIds = req.body.sellerIds;
+    if (!sellerIds) sellerIds = [];
+    else if (!Array.isArray(sellerIds)) sellerIds = [sellerIds];
+
+    const files = req.files || [];
+
+    // ✅ Upload each proof to Cloudinary and build mapping
+    const paymentProofsBySeller = {};
+    for (let i = 0; i < sellerIds.length; i++) {
+      const sellerId = sellerIds[i];
+      const file = files[i];
+      if (file) {
+        const result = await cloudinary.uploader.upload(file.path, {
+          folder: "paymentProofs"
+        });
+        paymentProofsBySeller[sellerId] = result.secure_url; // full URL
+      }
+    }
+
+    // Build order items
     const orderItems = cart.items.map(item => ({
       product: item.product._id,
-      seller: item.product.seller, // Assumes Product model has a 'seller' field
+      seller: item.product.seller._id.toString(),
       quantity: item.quantity,
       price: item.price
     }));
 
-    // Create the order
     const newOrder = await Order.create({
       buyer: buyerId,
       items: orderItems,
@@ -2287,63 +2321,89 @@ app.post("/api/order", auth, upload.single("paymentProof"), async (req, res) => 
       deliveryMethod,
       deliveryDate: deliveryDate || null,
       paymentMethod,
-      paymentProof: req.file ? req.file.path : "", // Uses your Cloudinary/Multer setup
       notes,
-      status: "Pending"
+      status: "Pending",
+      sellerTotals: JSON.parse(sellerTotals),
+      paymentProofsBySeller // ✅ attach here
     });
 
-    // Notify involved sellers via Socket.io
-    const uniqueSellers = [...new Set(orderItems.map(i => i.seller.toString()))];
-
+    // Notify sellers
+    const uniqueSellers = [...new Set(orderItems.map(i => i.seller))];
     uniqueSellers.forEach(sellerId => {
       const sellerRoom = `Seller_${sellerId}`;
+      const sellerSubtotal = orderItems
+        .filter(i => i.seller === sellerId)
+        .reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-      // Use io.to(sellerRoom) to hit the room, not a specific ID
-      // If 'io' is defined in your main server file, ensure it's accessible here
       io.to(sellerRoom).emit("newOrderNotification", {
         message: `New Order from ${name}!`,
         orderId: newOrder._id,
-        total: cart.totalPrice
+        total: sellerSubtotal
       });
-    }); // <--- YOU WERE MISSING THIS CLOSING BRACE AND PARENTHESIS
+    });
 
-    // Clear the cart after successful order
     await Cart.findOneAndDelete({ buyer: buyerId });
 
     res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
-} catch (error) {
+  } catch (error) {
     console.error("Order Creation Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
-  } // <--- Added this to close 'catch'
-}); 
+  }
+});
 
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
-    const sellerId = req.userId;
+    const sellerId = req.userId.toString();
 
+    // ✅ Get only orders that contain this seller's items
     const orders = await Order.find({
-      items: { $elemMatch: { seller: sellerId } }
+      "items.seller": sellerId
     })
-    .populate("items.product", "name")
-    .sort({ createdAt: -1 });
+      .populate("items.product", "name")
+      .sort({ createdAt: -1 });
 
-    // 🔥 filter ONLY seller items inside each order
     const filteredOrders = orders.map(order => {
-      const filteredItems = order.items.filter(
+      // Only include this seller's items
+      const sellerItems = order.items.filter(
         item => item.seller.toString() === sellerId
       );
 
       return {
-        ...order._doc,
-        items: filteredItems
+        _id: order._id,
+        status: order.status,
+        name: order.name,
+        phone: order.phone,
+        address: order.address,
+        notes: order.notes,
+        deliveryMethod: order.deliveryMethod,
+        paymentMethod: order.paymentMethod,
+        totalPrice: order.totalPrice,
+        createdAt: order.createdAt,
+
+        // ✅ Attach seller-specific payment proof at order level
+        paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
+
+        // ✅ Seller’s items only
+        items: sellerItems.map(item => ({
+          _id: item._id,
+          product: item.product,
+          quantity: item.quantity,
+          price: item.price
+        }))
       };
     });
 
-    res.json({ success: true, orders: filteredOrders });
+    res.json({
+      success: true,
+      orders: filteredOrders
+    });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    console.error("Seller Orders Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch seller orders"
+    });
   }
 });
 

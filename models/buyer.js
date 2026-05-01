@@ -24,6 +24,8 @@ const buyerSchema=new mongoose.Schema({
         },
 verificationCode: String,
 verificationExpires: Date,
+failedAttempts: { type: Number, default: 0 },
+lockUntil: { type: Date, default: null }
 })
 
 module.exports=mongoose.model("Buyer",buyerSchema);
