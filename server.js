@@ -2266,156 +2266,118 @@ app.get("/api/cart/count", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-app.post(
-  "/api/order",
-  auth,
-  upload.array("paymentProofs"),
-  async (req, res) => {
-    try {
-      const buyerId = req.userId;
+app.post("/api/order", auth, upload.any(), async (req, res) => {
+  try {
+    const buyerId = req.userId;
 
-      const {
-        name,
-        phone,
-        address,
-        deliveryMethod,
-        paymentMethod,
-        notes,
-        deliveryDate,
-        sellerTotals
-      } = req.body;
+    const {
+      name,
+      phone,
+      address,
+      deliveryMethod,
+      paymentMethod,
+      notes,
+      deliveryDate,
+      sellerTotals
+    } = req.body;
 
-      // ===============================
-      // GET CART
-      // ===============================
-      const cart = await Cart.findOne({ buyer: buyerId }).populate({
-        path: "items.product",
-        populate: {
-          path: "seller",
-          select: "name phone"
-        }
-      });
+    // ===============================
+    // GET CART
+    // ===============================
+    const cart = await Cart.findOne({ buyer: buyerId }).populate({
+      path: "items.product",
+      populate: { path: "seller", select: "name phone" }
+    });
 
-      if (!cart || cart.items.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Cart is empty"
-        });
-      }
-
-      const files = req.files || [];
-
-      // ===============================
-      // GET UNIQUE SELLERS FROM CART
-      // (NO sellerIds from frontend needed)
-      // ===============================
-      const sellerIds = [
-        ...new Set(
-          cart.items.map(item =>
-            item.product?.seller?._id?.toString()
-          )
-        )
-      ];
-
-      // ===============================
-      // MAP FILES TO SELLERS SAFELY
-      // ===============================
-      const paymentProofsBySeller = {};
-
-      sellerIds.forEach((sellerId, index) => {
-        const file = files[index];
-        if (!file || !sellerId) return;
-
-        paymentProofsBySeller[sellerId] = file.path;
-      });
-
-      // ===============================
-      // UPLOAD TO CLOUDINARY
-      // ===============================
-      for (const sellerId in paymentProofsBySeller) {
-        const localPath = paymentProofsBySeller[sellerId];
-
-        const result = await cloudinary.uploader.upload(localPath, {
-          folder: "paymentProofs"
-        });
-
-        paymentProofsBySeller[sellerId] = result.secure_url;
-      }
-
-      // ===============================
-      // BUILD ORDER ITEMS
-      // ===============================
-      const orderItems = cart.items.map(item => {
-        const sellerId = item.product.seller._id.toString();
-
-        return {
-          product: item.product._id,
-          seller: sellerId,
-          quantity: item.quantity,
-          price: item.price,
-
-          // ✅ FIX: frontend expects this
-          paymentProof: paymentProofsBySeller[sellerId] || null
-        };
-      });
-
-      // ===============================
-      // CREATE ORDER
-      // ===============================
-      const newOrder = await Order.create({
-        buyer: buyerId,
-        items: orderItems,
-        totalPrice: cart.totalPrice,
-        name,
-        phone,
-        address,
-        deliveryMethod,
-        deliveryDate: deliveryDate || null,
-        paymentMethod,
-        notes,
-        status: "Pending",
-        sellerTotals: sellerTotals ? JSON.parse(sellerTotals) : {}
-      });
-
-      // ===============================
-      // NOTIFY SELLERS
-      // ===============================
-      const uniqueSellers = [...new Set(orderItems.map(i => i.seller))];
-
-      uniqueSellers.forEach(sellerId => {
-        const sellerRoom = `Seller_${sellerId}`;
-
-        const sellerSubtotal = orderItems
-          .filter(i => i.seller === sellerId)
-          .reduce((sum, i) => sum + i.price * i.quantity, 0);
-
-        io.to(sellerRoom).emit("newOrderNotification", {
-          message: `New Order from ${name}!`,
-          orderId: newOrder._id,
-          total: sellerSubtotal
-        });
-      });
-
-      // ===============================
-      // CLEAR CART
-      // ===============================
-      await Cart.findOneAndDelete({ buyer: buyerId });
-
-      return res.json({
-        success: true,
-        message: "Order placed successfully!",
-        orderId: newOrder._id
-      });
-
-    } catch (error) {
-      console.error("Order Creation Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Server Error"
-      });
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ success: false, message: "Cart is empty" });
     }
+
+    // ===============================
+    // BUILD PAYMENT PROOFS BY SELLER
+    // ===============================
+    const paymentProofsBySeller = {};
+
+    for (const file of req.files) {
+      if (!file.fieldname.startsWith("proof_")) continue;
+
+      const sellerId = file.fieldname.replace("proof_", "");
+      const result = await cloudinary.uploader.upload(file.path, {
+        folder: "paymentProofs"
+      });
+
+      paymentProofsBySeller[sellerId] = result.secure_url;
+    }
+
+    // ===============================
+    // BUILD ORDER ITEMS
+    // ===============================
+    const orderItems = cart.items.map(item => {
+      const sellerId = item.product.seller._id.toString();
+
+      return {
+        product: item.product._id,
+        seller: sellerId,
+        quantity: item.quantity,
+        price: item.price,
+        paymentProof: paymentProofsBySeller[sellerId] || null
+      };
+    });
+
+    // ===============================
+    // CREATE ORDER
+    // ===============================
+    const newOrder = await Order.create({
+      buyer: buyerId,
+      items: orderItems,
+      totalPrice: cart.totalPrice,
+      name,
+      phone,
+      address,
+      deliveryMethod,
+      deliveryDate: deliveryDate || null,
+      paymentMethod,
+      notes,
+      status: "Pending",
+      sellerTotals: sellerTotals ? JSON.parse(sellerTotals) : {},
+      paymentProofsBySeller // 👈 keep full mapping for later
+    });
+
+    // ===============================
+    // NOTIFY SELLERS
+    // ===============================
+    const uniqueSellers = [...new Set(orderItems.map(i => i.seller))];
+
+    uniqueSellers.forEach(sellerId => {
+      const sellerRoom = `Seller_${sellerId}`;
+      const sellerSubtotal = orderItems
+        .filter(i => i.seller === sellerId)
+        .reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+      io.to(sellerRoom).emit("newOrderNotification", {
+        message: `New Order from ${name}!`,
+        orderId: newOrder._id,
+        total: sellerSubtotal
+      });
+    });
+
+    // ===============================
+    // CLEAR CART
+    // ===============================
+    await Cart.findOneAndDelete({ buyer: buyerId });
+
+    return res.json({
+      success: true,
+      message: "Order placed successfully!",
+      orderId: newOrder._id
+    });
+
+  } catch (error) {
+    console.error("Order Creation Error:", error);
+    return res.status(500).json({ success: false, message: "Server Error" });
   }
-);
+});
+
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
