@@ -2166,10 +2166,9 @@ app.post("/api/cart/add", auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Cart Error" });
   }
 });
-
 app.get("/api/cart", auth, async (req, res) => {
   try {
-    const buyer = await Buyer.findById(req.userId).select("profile");
+    const buyer = await Buyer.findById(req.userId).select("name phone");
 
     const cart = await Cart.findOne({ buyer: req.userId })
       .populate({
@@ -2185,14 +2184,20 @@ app.get("/api/cart", auth, async (req, res) => {
       return res.json({ success: true, cart: null });
     }
 
-    // ✅ Extract UNIQUE sellers
     const sellersMap = new Map();
 
     cart.items.forEach(item => {
-      const seller = item.product.seller;
+      if (!item.product || !item.product.seller) return;
 
-      if (seller && !sellersMap.has(seller._id.toString())) {
-        sellersMap.set(seller._id.toString(), seller);
+      const seller = item.product.seller;
+      const sellerId = seller._id ? seller._id.toString() : seller.toString();
+
+      if (!sellersMap.has(sellerId)) {
+        sellersMap.set(sellerId, {
+          _id: seller._id,
+          name: seller.name,
+          phone: seller.phone
+        });
       }
     });
 
@@ -2205,6 +2210,7 @@ app.get("/api/cart", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
 app.put("/api/cart/update", auth, async (req, res) => {
   try {
     const { productId, quantity } = req.body;
@@ -2260,96 +2266,147 @@ app.get("/api/cart/count", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-app.post("/api/order", auth, upload.array("paymentProofs"), async (req, res) => {
-  try {
-    const buyerId = req.userId;
-    const {
-      name,
-      phone,
-      address,
-      deliveryMethod,
-      paymentMethod,
-      notes,
-      deliveryDate,
-      sellerTotals
-    } = req.body;
+app.post(
+  "/api/order",
+  auth,
+  upload.array("paymentProofs"),
+  async (req, res) => {
+    try {
+      const buyerId = req.userId;
 
-    const cart = await Cart.findOne({ buyer: buyerId }).populate({
-      path: "items.product",
-      populate: { path: "seller", select: "name phone" }
-    });
+      const {
+        name,
+        phone,
+        address,
+        deliveryMethod,
+        paymentMethod,
+        notes,
+        deliveryDate,
+        sellerTotals
+      } = req.body;
 
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({ success: false, message: "Cart is empty" });
-    }
+      // Get cart
+      const cart = await Cart.findOne({ buyer: buyerId }).populate({
+        path: "items.product",
+        populate: { path: "seller", select: "name phone" }
+      });
 
-    // Normalize sellerIds
-    let sellerIds = req.body.sellerIds;
-    if (!sellerIds) sellerIds = [];
-    else if (!Array.isArray(sellerIds)) sellerIds = [sellerIds];
+      if (!cart || cart.items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Cart is empty"
+        });
+      }
 
-    const files = req.files || [];
+      // ===============================
+      // 🔥 SAFE SELLER IDS HANDLING
+      // ===============================
+      let sellerIds = req.body.sellerIds || [];
 
-    // ✅ Upload each proof to Cloudinary and build mapping
-    const paymentProofsBySeller = {};
-    for (let i = 0; i < sellerIds.length; i++) {
-      const sellerId = sellerIds[i];
-      const file = files[i];
-      if (file) {
-        const result = await cloudinary.uploader.upload(file.path, {
+      if (!Array.isArray(sellerIds)) {
+        sellerIds = [sellerIds];
+      }
+
+      const files = req.files || [];
+
+      // ===============================
+      // 🔥 SAFE PAYMENT PROOF MAPPING
+      // ===============================
+      const paymentProofsBySeller = {};
+
+      sellerIds.forEach((sellerId, index) => {
+        const file = files[index];
+        if (!file) return;
+
+        paymentProofsBySeller[sellerId] = file.path; // temp path first
+      });
+
+      // Upload to Cloudinary safely
+      for (const sellerId in paymentProofsBySeller) {
+        const localPath = paymentProofsBySeller[sellerId];
+
+        const result = await cloudinary.uploader.upload(localPath, {
           folder: "paymentProofs"
         });
-        paymentProofsBySeller[sellerId] = result.secure_url; // full URL
+
+        paymentProofsBySeller[sellerId] = result.secure_url;
       }
-    }
 
-    // Build order items
-    const orderItems = cart.items.map(item => ({
-      product: item.product._id,
-      seller: item.product.seller._id.toString(),
-      quantity: item.quantity,
-      price: item.price
-    }));
+      // ===============================
+      // 🔥 BUILD ORDER ITEMS (FIXED)
+      // ===============================
+      const orderItems = cart.items.map((item) => {
+        const sellerId = item.product.seller._id.toString();
 
-    const newOrder = await Order.create({
-      buyer: buyerId,
-      items: orderItems,
-      totalPrice: cart.totalPrice,
-      name,
-      phone,
-      address,
-      deliveryMethod,
-      deliveryDate: deliveryDate || null,
-      paymentMethod,
-      notes,
-      status: "Pending",
-      sellerTotals: JSON.parse(sellerTotals),
-      paymentProofsBySeller // ✅ attach here
-    });
+        return {
+          product: item.product._id,
+          seller: sellerId,
+          quantity: item.quantity,
+          price: item.price,
 
-    // Notify sellers
-    const uniqueSellers = [...new Set(orderItems.map(i => i.seller))];
-    uniqueSellers.forEach(sellerId => {
-      const sellerRoom = `Seller_${sellerId}`;
-      const sellerSubtotal = orderItems
-        .filter(i => i.seller === sellerId)
-        .reduce((sum, i) => sum + i.price * i.quantity, 0);
-
-      io.to(sellerRoom).emit("newOrderNotification", {
-        message: `New Order from ${name}!`,
-        orderId: newOrder._id,
-        total: sellerSubtotal
+          // ✅ THIS FIXES YOUR FRONTEND ISSUE
+          paymentProof: paymentProofsBySeller[sellerId] || null
+        };
       });
-    });
 
-    await Cart.findOneAndDelete({ buyer: buyerId });
+      // ===============================
+      // CREATE ORDER
+      // ===============================
+      const newOrder = await Order.create({
+        buyer: buyerId,
+        items: orderItems,
+        totalPrice: cart.totalPrice,
+        name,
+        phone,
+        address,
+        deliveryMethod,
+        deliveryDate: deliveryDate || null,
+        paymentMethod,
+        notes,
+        status: "Pending",
+        sellerTotals: sellerTotals ? JSON.parse(sellerTotals) : {}
+      });
 
-    res.json({ success: true, message: "Order placed successfully!", orderId: newOrder._id });
-  } catch (error) {
-    console.error("Order Creation Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+      // ===============================
+      // NOTIFY SELLERS
+      // ===============================
+      const uniqueSellers = [
+        ...new Set(orderItems.map((i) => i.seller))
+      ];
+
+      uniqueSellers.forEach((sellerId) => {
+        const sellerRoom = `Seller_${sellerId}`;
+
+        const sellerSubtotal = orderItems
+          .filter((i) => i.seller === sellerId)
+          .reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+        io.to(sellerRoom).emit("newOrderNotification", {
+          message: `New Order from ${name}!`,
+          orderId: newOrder._id,
+          total: sellerSubtotal
+        });
+      });
+
+      // ===============================
+      // CLEAR CART
+      // ===============================
+      await Cart.findOneAndDelete({ buyer: buyerId });
+
+      res.json({
+        success: true,
+        message: "Order placed successfully!",
+        orderId: newOrder._id
+      });
+    } catch (error) {
+      console.error("Order Creation Error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server Error"
+      });
+    }
   }
-});
+);
 
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
