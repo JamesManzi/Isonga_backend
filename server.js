@@ -2420,7 +2420,7 @@ app.get("/api/seller/orders", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
 
-    // ✅ Get only orders that contain this seller's items
+    // Get only orders that contain this seller's items
     const orders = await Order.find({
       "items.seller": sellerId
     })
@@ -2428,7 +2428,7 @@ app.get("/api/seller/orders", auth, async (req, res) => {
       .sort({ createdAt: -1 });
 
     const filteredOrders = orders.map(order => {
-      // Only include this seller's items
+      // Only this seller's items
       const sellerItems = order.items.filter(
         item => item.seller.toString() === sellerId
       );
@@ -2445,15 +2445,18 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         totalPrice: order.totalPrice,
         createdAt: order.createdAt,
 
-        // ✅ Attach seller-specific payment proof at order level
-        paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
+        // ✅ FIXED: take payment proof from item (NOT order.paymentProofsBySeller)
+        paymentProof: sellerItems[0]?.paymentProof || null,
 
-        // ✅ Seller’s items only
+        // Seller items only
         items: sellerItems.map(item => ({
           _id: item._id,
           product: item.product,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+
+          // ✅ THIS is what frontend uses
+          paymentProof: item.paymentProof || null
         }))
       };
     });
@@ -2471,7 +2474,6 @@ app.get("/api/seller/orders", auth, async (req, res) => {
     });
   }
 });
-
     app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
