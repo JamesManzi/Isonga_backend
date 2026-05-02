@@ -2426,77 +2426,68 @@ app.get("/api/seller/orders", auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch seller orders" });
   }
 });
-
-    app.put("/api/order/status/:id", auth, async (req, res) => {
+app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
-    const id = req.params.id;
+    const orderId = req.params.id;
     const { status } = req.body;
 
-    const item = await Order.findById(id);
+    // 1. Update ONLY the items belonging to this seller within the order
+    // We use arrayFilters to identify items matching the sellerId
+    const updatedOrder = await Order.findOneAndUpdate(
+      { 
+        _id: orderId, 
+        "items.seller": sellerId // Ensure the seller actually has items here
+      },
+      { 
+        $set: { "items.$[elem].status": status } 
+      },
+      {
+        arrayFilters: [{ "elem.seller": sellerId }],
+        new: true 
+      }
+    );
 
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!updatedOrder) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Order not found or you have no items in this order" 
+      });
     }
 
-    // Check ownership
-    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
-    if (!isOwner) {
-      return res.status(403).json({ success: false, message: "Not authorized" });
-    }
+    // 2. Notification Logic (Remains similar, but specifically for this seller's action)
+    const displayId = updatedOrder._id.toString().slice(-6).toUpperCase();
+    const notificationMessage = `Seller has ${status.toLowerCase()} items in your order #${displayId}`;
 
-    // Prevent duplicate updates
-    if (item.status !== "Pending") {
-      return res.json({ success: false, message: `Already ${item.status}` });
-    }
-
-    // Update status
-    item.status = status;
-    await item.save();
-
-    const displayId = item._id.toString().slice(-6).toUpperCase();
-    const notificationMessage =
-      status === "Accepted"
-        ? ` Your order #${displayId} has been accepted!`
-        : ` Your order #${displayId} was declined.`;
-
-    // 1. Create the notification in DB
     const newNotif = await Notification.create({
-      recipient: item.buyer,
+      recipient: updatedOrder.buyer,
       sender: sellerId,
       message: notificationMessage,
-      orderId: item._id,
-      read: false,
+      orderId: updatedOrder._id,
       category: "Order"
     });
 
-    // 2. CRITICAL: Calculate the REAL unread count for this buyer
     const unreadCount = await Notification.countDocuments({
-      recipient: item.buyer,
+      recipient: updatedOrder.buyer,
       read: false
     });
 
-    const buyerRoom = `Buyer_${item.buyer}`;
-
-    // 3. EMIT: Match the frontend listener name
-    // If your frontend uses socket.on("notification"), change it here:
-    io.to(buyerRoom).emit("notification", {
+    io.to(`Buyer_${updatedOrder.buyer}`).emit("notification", {
       _id: newNotif._id,
       message: notificationMessage,
-      unreadCount: unreadCount, // Now this has a real value!
-      orderId: item._id,
-      status: status,
-      createdAt: newNotif.createdAt
+      unreadCount: unreadCount,
+      orderId: updatedOrder._id,
+      status: status
     });
 
     res.json({
       success: true,
-      message: `Order ${status.toLowerCase()} successfully`,
-      data: item
+      message: `Your items have been ${status.toLowerCase()}`,
+      data: updatedOrder
     });
 
   } catch (err) {
-    console.error(" Status Update Error:", err);
+    console.error("Status Update Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
