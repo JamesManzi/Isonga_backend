@@ -96,7 +96,12 @@ const OrderSchema = new mongoose.Schema(
     seen: {
   type: Boolean,
   default: false
-}
+},
+ status: {
+      type: String,
+      enum: ["Pending", "Accepted", "Cancelled"],
+      default: "Pending"
+    }
   },
   { timestamps: true }
 );
