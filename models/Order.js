@@ -1,5 +1,3 @@
-
-
 const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema(
@@ -31,6 +29,12 @@ const OrderSchema = new mongoose.Schema(
           type: Number,
           required: true,
           min: 0
+        },
+        // Moved status here so each seller can accept/decline their own items
+        status: {
+          type: String,
+          enum: ["Pending", "Accepted", "Cancelled"],
+          default: "Pending"
         }
       }
     ],
@@ -41,60 +45,28 @@ const OrderSchema = new mongoose.Schema(
       min: 0
     },
 
-    // 👤 Customer Info
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    phone: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    address: {
-      type: String,
-      required: true,
-      trim: true
-    },
+    name: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    address: { type: String, required: true, trim: true },
 
-    //  Delivery
     deliveryMethod: {
       type: String,
       enum: ["standard", "express", "pickup"],
       default: "standard"
     },
 
-    deliveryDate: {
-      type: Date
-    },
+    deliveryDate: { type: Date },
 
-    //  Payment
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile", "card"],
       default: "cash"
     },
 
-    //  NEW: Payment proof image
-    paymentProof: {
-      type: String, // store file path
-      default: ""
-    },
-
-    notes: {
-      type: String,
-      default: ""
-    },
-    seen: {
-  type: Boolean,
-  default: false
-},
- status: {
-      type: String,
-      enum: ["Pending", "Accepted", "Cancelled"],
-      default: "Pending"
-    }
+    paymentProof: { type: String, default: "" },
+    notes: { type: String, default: "" },
+    seen: { type: Boolean, default: false }
+    // Global status removed from here
   },
   { timestamps: true }
 );
