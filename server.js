@@ -2392,6 +2392,10 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         item => item.seller.toString() === sellerId
       );
 
+      const sellerTotalPrice = sellerItems.reduce((sum, item) => {
+        return sum + (item.price * item.quantity);
+      }, 0);
+
       return {
         _id: order._id,
         status: order.status,
@@ -2401,7 +2405,7 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         notes: order.notes,
         deliveryMethod: order.deliveryMethod,
         paymentMethod: order.paymentMethod,
-        totalPrice: order.totalPrice,
+        totalPrice: sellerTotalPrice,
         createdAt: order.createdAt,
 
         // ✅ FIX: pull proof from order.paymentProofsBySeller
