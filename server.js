@@ -2500,7 +2500,7 @@ app.get("/api/seller/orders", auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-    //  Add this route to handle fetching a single order by ID
+ //  Add this route to handle fetching a single order by ID
     app.get("/api/orders/:id", auth, async (req, res) => {
       try {
         const orderId = req.params.id;
