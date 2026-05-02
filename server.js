@@ -2377,7 +2377,6 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
     return res.status(500).json({ success: false, message: "Server Error" });
   }
 });
-
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
@@ -2388,155 +2387,216 @@ app.get("/api/seller/orders", auth, async (req, res) => {
       .populate("items.product", "name")
       .sort({ createdAt: -1 });
 
-    const filteredOrders = orders.map(order => {
-      const sellerItems = order.items.filter(
-        item => item.seller.toString() === sellerId
-      );
+    const filteredOrders = orders
+      .map(order => {
+        // ✅ Only this seller's items AND still pending
+        const sellerItems = order.items.filter(
+          item =>
+            item.seller.toString() === sellerId &&
+            item.status === "Pending"
+        );
 
-      return {
-        _id: order._id,
-        status: order.status,
-        name: order.name,
-        phone: order.phone,
-        address: order.address,
-        notes: order.notes,
-        deliveryMethod: order.deliveryMethod,
-        paymentMethod: order.paymentMethod,
-        totalPrice: order.totalPrice,
-        createdAt: order.createdAt,
+        if (sellerItems.length === 0) return null;
 
-        // ✅ FIX: pull proof from order.paymentProofsBySeller
-        paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
+        // ✅ Seller-specific total
+        const sellerTotal = sellerItems.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0
+        );
 
-        items: sellerItems.map(item => ({
-          _id: item._id,
-          product: item.product,
-          quantity: item.quantity,
-          price: item.price
-        }))
-      };
-    });
+        return {
+          _id: order._id,
+          name: order.name,
+          phone: order.phone,
+          address: order.address,
+          notes: order.notes,
+          deliveryMethod: order.deliveryMethod,
+          paymentMethod: order.paymentMethod,
+          createdAt: order.createdAt,
+
+          // ✅ Seller-specific payment proof
+          paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
+
+          totalPrice: sellerTotal, // ✅ FIXED
+
+          items: sellerItems.map(item => ({
+            _id: item._id,
+            product: item.product,
+            quantity: item.quantity,
+            price: item.price,
+            status: item.status
+          }))
+        };
+      })
+      .filter(Boolean);
 
     res.json({ success: true, orders: filteredOrders });
+
   } catch (err) {
     console.error("Seller Orders Error:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch seller orders" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch seller orders"
+    });
   }
 });
-
-    app.put("/api/order/status/:id", auth, async (req, res) => {
+app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
-    const sellerId = req.userId;
-    const id = req.params.id;
+    const sellerId = req.userId.toString();
+    const orderId = req.params.id;
     const { status } = req.body;
 
-    const item = await Order.findById(id);
+    const order = await Order.findById(orderId);
 
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
     }
 
-    // Check ownership
-    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
-    if (!isOwner) {
-      return res.status(403).json({ success: false, message: "Not authorized" });
+    let updated = false;
+
+    // ✅ Update ONLY this seller's items
+    order.items = order.items.map(item => {
+      if (item.seller.toString() === sellerId) {
+
+        if (item.status !== "Pending") {
+          return item; // already handled
+        }
+
+        updated = true;
+
+        return {
+          ...item.toObject(),
+          status // Accepted / Cancelled
+        };
+      }
+      return item;
+    });
+
+    if (!updated) {
+      return res.status(400).json({
+        success: false,
+        message: "No pending items to update"
+      });
     }
 
-    // Prevent duplicate updates
-    if (item.status !== "Pending") {
-      return res.json({ success: false, message: `Already ${item.status}` });
+    await order.save();
+
+    // ✅ OPTIONAL: Update global order status
+    const allDone = order.items.every(i => i.status !== "Pending");
+
+    if (allDone) {
+      order.status = "Completed";
+      await order.save();
     }
 
-    // Update status
-    item.status = status;
-    await item.save();
+    // ✅ Notification
+    const displayId = order._id.toString().slice(-6).toUpperCase();
 
-    const displayId = item._id.toString().slice(-6).toUpperCase();
     const notificationMessage =
       status === "Accepted"
-        ? ` Your order #${displayId} has been accepted!`
-        : ` Your order #${displayId} was declined.`;
+        ? `Your order #${displayId} has been partially accepted.`
+        : `Some items in order #${displayId} were declined.`;
 
-    // 1. Create the notification in DB
     const newNotif = await Notification.create({
-      recipient: item.buyer,
+      recipient: order.buyer,
       sender: sellerId,
       message: notificationMessage,
-      orderId: item._id,
+      orderId: order._id,
       read: false,
       category: "Order"
     });
 
-    // 2. CRITICAL: Calculate the REAL unread count for this buyer
     const unreadCount = await Notification.countDocuments({
-      recipient: item.buyer,
+      recipient: order.buyer,
       read: false
     });
 
-    const buyerRoom = `Buyer_${item.buyer}`;
+    const buyerRoom = `Buyer_${order.buyer}`;
 
-    // 3. EMIT: Match the frontend listener name
-    // If your frontend uses socket.on("notification"), change it here:
     io.to(buyerRoom).emit("notification", {
       _id: newNotif._id,
       message: notificationMessage,
-      unreadCount: unreadCount, // Now this has a real value!
-      orderId: item._id,
-      status: status,
+      unreadCount,
+      orderId: order._id,
+      status,
       createdAt: newNotif.createdAt
     });
 
     res.json({
       success: true,
-      message: `Order ${status.toLowerCase()} successfully`,
-      data: item
+      message: "Item status updated successfully",
+      data: order
     });
 
   } catch (err) {
-    console.error(" Status Update Error:", err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("Status Update Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
   }
 });
-    //  Add this route to handle fetching a single order by ID
-    app.get("/api/orders/:id", auth, async (req, res) => {
-      try {
-        const orderId = req.params.id;
 
-        // Find the order and populate product details
-        const order = await Order.findById(orderId).populate("items.product");
+app.get("/api/orders/:id", auth, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const userId = req.userId.toString();
 
-        if (!order) {
-          return res.status(404).json({
-            success: false,
-            message: "Order not found in database",
-          });
-        }
+    const order = await Order.findById(orderId)
+      .populate("items.product");
 
-        // Security: Ensure the person requesting is either the Buyer or the Seller of this order
-        const isBuyer = order.buyer.toString() === req.userId.toString();
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
 
-        // Check if the seller is involved in any item of this order
-        const isSeller = order.items.some(item => item.seller.toString() === req.userId.toString());
+    const isBuyer = order.buyer.toString() === userId;
+    const isSeller = order.items.some(
+      item => item.seller.toString() === userId
+    );
 
-        if (!isBuyer && !isSeller) {
-          return res.status(403).json({
-            success: false,
-            message: "Not authorized to view this order",
-          });
-        }
+    if (!isBuyer && !isSeller) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized"
+      });
+    }
 
-        res.json({
-          success: true,
-          order,
-        });
-      } catch (err) {
-        console.error(" Fetch Order Error:", err);
-        res.status(500).json({
-          success: false,
-          message: "Server error while fetching order",
-        });
-      }
+    let responseOrder = order.toObject();
+
+    // ✅ If seller → only show their items
+    if (isSeller && !isBuyer) {
+      const sellerItems = order.items.filter(
+        item => item.seller.toString() === userId
+      );
+
+      const sellerTotal = sellerItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      responseOrder.items = sellerItems;
+      responseOrder.totalPrice = sellerTotal;
+    }
+
+    res.json({
+      success: true,
+      order: responseOrder
     });
+
+  } catch (err) {
+    console.error("Fetch Order Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
 
     //  CORRECTED: MARK ALL NOTIFICATIONS AS READ
     app.put("/api/notifications/mark-read", auth, async (req, res) => {
