@@ -1,5 +1,3 @@
-
-
 const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema(
@@ -31,6 +29,13 @@ const OrderSchema = new mongoose.Schema(
           type: Number,
           required: true,
           min: 0
+        },
+
+        // ✅ NEW: status per seller (CRITICAL FIX)
+        status: {
+          type: String,
+          enum: ["Pending", "Accepted", "Cancelled"],
+          default: "Pending"
         }
       }
     ],
@@ -58,7 +63,7 @@ const OrderSchema = new mongoose.Schema(
       trim: true
     },
 
-    //  Delivery
+    // 🚚 Delivery
     deliveryMethod: {
       type: String,
       enum: ["standard", "express", "pickup"],
@@ -69,28 +74,32 @@ const OrderSchema = new mongoose.Schema(
       type: Date
     },
 
-    //  Payment
+    // 💳 Payment
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile", "card"],
       default: "cash"
     },
 
-    //  NEW: Payment proof image
-    paymentProof: {
-      type: String, // store file path
-      default: ""
+    // ✅ IMPROVED: payment proof per seller
+    paymentProofsBySeller: {
+      type: Map,
+      of: String, // sellerId => image path
+      default: {}
     },
 
     notes: {
       type: String,
       default: ""
     },
+
     seen: {
-  type: Boolean,
-  default: false
-},
- status: {
+      type: Boolean,
+      default: false
+    },
+
+    // ✅ OPTIONAL: overall order status (computed or fallback)
+    status: {
       type: String,
       enum: ["Pending", "Accepted", "Cancelled"],
       default: "Pending"
@@ -100,4 +109,3 @@ const OrderSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Order", OrderSchema);
-

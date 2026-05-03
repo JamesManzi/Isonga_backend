@@ -2380,7 +2380,10 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
-    const orders = await Order.find({ "items.seller": sellerId })
+
+    const orders = await Order.find({
+      "items.seller": sellerId
+    })
       .populate("items.product", "name")
       .sort({ createdAt: -1 });
 
@@ -2389,33 +2392,37 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         item => item.seller.toString() === sellerId
       );
 
-      const sellerTotalPrice = sellerItems.reduce((sum, item) => {
-        return sum + (item.price * item.quantity);
-      }, 0);
-
-      // ✅ FIX: Use the status from the individual item, not order.status
-      // Assuming all items from one seller in one order share the same status
-      const sellerSpecificStatus = sellerItems[0]?.status || order.status;
-
       return {
         _id: order._id,
-        status: sellerSpecificStatus, // CHANGED THIS
+        status: order.status,
         name: order.name,
-        // ... rest of your fields
+        phone: order.phone,
+        address: order.address,
+        notes: order.notes,
+        deliveryMethod: order.deliveryMethod,
+        paymentMethod: order.paymentMethod,
+        totalPrice: order.totalPrice,
+        createdAt: order.createdAt,
+
+        // ✅ FIX: pull proof from order.paymentProofsBySeller
+        paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
+
         items: sellerItems.map(item => ({
           _id: item._id,
           product: item.product,
           quantity: item.quantity,
-          price: item.price,
-          status: item.status // Include it here too for the frontend
+          price: item.price
         }))
       };
     });
 
     res.json({ success: true, orders: filteredOrders });
-  } catch (err) { /* ... error handling */ }
+  } catch (err) {
+    console.error("Seller Orders Error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch seller orders" });
+  }
 });
-    app.put("/api/order/status/:id", auth, async (req, res) => {
+app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
     const id = req.params.id;
@@ -2438,30 +2445,9 @@ app.get("/api/seller/orders", auth, async (req, res) => {
       return res.json({ success: false, message: `Already ${item.status}` });
     }
 
-    // 1. Find and update only the items belonging to this seller
-let sellerItemsUpdated = false;
-
-item.items.forEach((orderItem) => {
-  if (orderItem.seller.toString() === sellerId) {
-    orderItem.status = status; // Ensure your Schema has 'status' inside the items array
-    sellerItemsUpdated = true;
-  }
-});
-
-if (!sellerItemsUpdated) {
-  return res.status(403).json({ success: false, message: "No items found for this seller" });
-}
-
-// 2. Optional: Logic for the overall Order status
-// If all sellers have "Accepted", you might want to mark the whole order "Accepted"
-const allAccepted = item.items.every(i => i.status === "Accepted");
-if (allAccepted) {
-  item.status = "Accepted";
-} else if (item.items.some(i => i.status === "Accepted")) {
-  item.status = "Partially Accepted";
-}
-
-await item.save();
+    // Update status
+    item.status = status;
+    await item.save();
 
     const displayId = item._id.toString().slice(-6).toUpperCase();
     const notificationMessage =
