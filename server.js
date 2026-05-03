@@ -2450,9 +2450,30 @@ app.get("/api/seller/orders", auth, async (req, res) => {
       return res.json({ success: false, message: `Already ${item.status}` });
     }
 
-    // Update status
-    item.status = status;
-    await item.save();
+    // 1. Find and update only the items belonging to this seller
+let sellerItemsUpdated = false;
+
+item.items.forEach((orderItem) => {
+  if (orderItem.seller.toString() === sellerId) {
+    orderItem.status = status; // Ensure your Schema has 'status' inside the items array
+    sellerItemsUpdated = true;
+  }
+});
+
+if (!sellerItemsUpdated) {
+  return res.status(403).json({ success: false, message: "No items found for this seller" });
+}
+
+// 2. Optional: Logic for the overall Order status
+// If all sellers have "Accepted", you might want to mark the whole order "Accepted"
+const allAccepted = item.items.every(i => i.status === "Accepted");
+if (allAccepted) {
+  item.status = "Accepted";
+} else if (item.items.some(i => i.status === "Accepted")) {
+  item.status = "Partially Accepted";
+}
+
+await item.save();
 
     const displayId = item._id.toString().slice(-6).toUpperCase();
     const notificationMessage =
