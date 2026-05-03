@@ -2380,10 +2380,7 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
-
-    const orders = await Order.find({
-      "items.seller": sellerId
-    })
+    const orders = await Order.find({ "items.seller": sellerId })
       .populate("items.product", "name")
       .sort({ createdAt: -1 });
 
@@ -2396,37 +2393,28 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         return sum + (item.price * item.quantity);
       }, 0);
 
+      // ✅ FIX: Use the status from the individual item, not order.status
+      // Assuming all items from one seller in one order share the same status
+      const sellerSpecificStatus = sellerItems[0]?.status || order.status;
+
       return {
         _id: order._id,
-        status: order.status,
+        status: sellerSpecificStatus, // CHANGED THIS
         name: order.name,
-        phone: order.phone,
-        address: order.address,
-        notes: order.notes,
-        deliveryMethod: order.deliveryMethod,
-        paymentMethod: order.paymentMethod,
-        totalPrice: sellerTotalPrice,
-        createdAt: order.createdAt,
-
-        // ✅ FIX: pull proof from order.paymentProofsBySeller
-        paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
-
+        // ... rest of your fields
         items: sellerItems.map(item => ({
           _id: item._id,
           product: item.product,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          status: item.status // Include it here too for the frontend
         }))
       };
     });
 
     res.json({ success: true, orders: filteredOrders });
-  } catch (err) {
-    console.error("Seller Orders Error:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch seller orders" });
-  }
+  } catch (err) { /* ... error handling */ }
 });
-
     app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
