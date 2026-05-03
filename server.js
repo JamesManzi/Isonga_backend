@@ -2378,44 +2378,85 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
   }
 });
 app.get("/api/seller/orders", auth, async (req, res) => {
+
   try {
+
     const sellerId = req.userId.toString();
 
+
+
     const orders = await Order.find({
+
       "items.seller": sellerId
+
     })
+
       .populate("items.product", "name")
+
       .sort({ createdAt: -1 });
 
+
+
     const filteredOrders = orders.map(order => {
+
       const sellerItems = order.items.filter(
+
         item => item.seller.toString() === sellerId
+
       );
 
+
+
+      const sellerTotalPrice = sellerItems.reduce((sum, item) => {
+
+        return sum + (item.price * item.quantity);
+
+      }, 0);
+
+
+
       return {
+
         _id: order._id,
+
         status: order.status,
+
         name: order.name,
+
         phone: order.phone,
+
         address: order.address,
+
         notes: order.notes,
+
         deliveryMethod: order.deliveryMethod,
+
         paymentMethod: order.paymentMethod,
-        totalPrice: order.totalPrice,
+
+        totalPrice: sellerTotalPrice,
+
         createdAt: order.createdAt,
 
+
+
         // ✅ FIX: pull proof from order.paymentProofsBySeller
+
         paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
 
+
+
         items: sellerItems.map(item => ({
+
           _id: item._id,
+
           product: item.product,
+
           quantity: item.quantity,
+
           price: item.price
         }))
       };
     });
-
     res.json({ success: true, orders: filteredOrders });
   } catch (err) {
     console.error("Seller Orders Error:", err);
