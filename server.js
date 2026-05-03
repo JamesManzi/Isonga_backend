@@ -2378,25 +2378,15 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
   }
 });
 app.get("/api/seller/orders", auth, async (req, res) => {
-
   try {
-
     const sellerId = req.userId.toString();
-
-
-
     const orders = await Order.find({
 
       "items.seller": sellerId
-
     })
-
       .populate("items.product", "name")
 
       .sort({ createdAt: -1 });
-
-
-
     const filteredOrders = orders.map(order => {
 
       const sellerItems = order.items.filter(
@@ -2405,15 +2395,11 @@ app.get("/api/seller/orders", auth, async (req, res) => {
 
       );
 
-
-
       const sellerTotalPrice = sellerItems.reduce((sum, item) => {
 
         return sum + (item.price * item.quantity);
 
       }, 0);
-
-
 
       return {
 
@@ -2432,21 +2418,11 @@ app.get("/api/seller/orders", auth, async (req, res) => {
         deliveryMethod: order.deliveryMethod,
 
         paymentMethod: order.paymentMethod,
-
         totalPrice: sellerTotalPrice,
-
         createdAt: order.createdAt,
-
-
-
         // ✅ FIX: pull proof from order.paymentProofsBySeller
-
         paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
-
-
-
         items: sellerItems.map(item => ({
-
           _id: item._id,
 
           product: item.product,
@@ -2465,74 +2441,90 @@ app.get("/api/seller/orders", auth, async (req, res) => {
 });
 app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
-    const sellerId = req.userId;
-    const id = req.params.id;
+    const sellerId = req.userId.toString();
+    const orderId = req.params.id;
     const { status } = req.body;
 
-    const item = await Order.findById(id);
+    const order = await Order.findById(orderId);
 
-    if (!item) {
+    if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // Check ownership
-    const isOwner = item.items.some(i => i.seller.toString() === sellerId);
-    if (!isOwner) {
+    // ✅ Get only this seller's items
+    const sellerItems = order.items.filter(
+      i => i.seller.toString() === sellerId
+    );
+
+    if (sellerItems.length === 0) {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
-    // Prevent duplicate updates
-    if (item.status !== "Pending") {
-      return res.json({ success: false, message: `Already ${item.status}` });
+    // ✅ Prevent duplicate updates PER SELLER (not global)
+    const alreadyUpdated = sellerItems.every(i => i.status !== "Pending");
+    if (alreadyUpdated) {
+      return res.json({
+        success: false,
+        message: `Already ${sellerItems[0].status}`
+      });
     }
 
-    // Update status
-    item.status = status;
-    await item.save();
+    // ✅ UPDATE ONLY THIS SELLER'S ITEMS
+    order.items.forEach(i => {
+      if (i.seller.toString() === sellerId) {
+        i.status = status;
+      }
+    });
 
-    const displayId = item._id.toString().slice(-6).toUpperCase();
-    const notificationMessage =
+    // ✅ OPTIONAL: recalculate overall order status
+    const allAccepted = order.items.every(i => i.status === "Accepted");
+    const anyCancelled = order.items.some(i => i.status === "Cancelled");
+
+    if (allAccepted) order.status = "Accepted";
+    else if (anyCancelled) order.status = "Cancelled";
+    else order.status = "Pending";
+
+    await order.save();
+
+    // ✅ Notification (same as yours)
+    const displayId = order._id.toString().slice(-6).toUpperCase();
+
+    const message =
       status === "Accepted"
-        ? ` Your order #${displayId} has been accepted!`
-        : ` Your order #${displayId} was declined.`;
+        ? `Your order #${displayId} item was accepted`
+        : `Your order #${displayId} item was declined`;
 
-    // 1. Create the notification in DB
     const newNotif = await Notification.create({
-      recipient: item.buyer,
+      recipient: order.buyer,
       sender: sellerId,
-      message: notificationMessage,
-      orderId: item._id,
+      message,
+      orderId: order._id,
       read: false,
       category: "Order"
     });
 
-    // 2. CRITICAL: Calculate the REAL unread count for this buyer
     const unreadCount = await Notification.countDocuments({
-      recipient: item.buyer,
+      recipient: order.buyer,
       read: false
     });
 
-    const buyerRoom = `Buyer_${item.buyer}`;
-
-    // 3. EMIT: Match the frontend listener name
-    // If your frontend uses socket.on("notification"), change it here:
-    io.to(buyerRoom).emit("notification", {
+    io.to(`Buyer_${order.buyer}`).emit("notification", {
       _id: newNotif._id,
-      message: notificationMessage,
-      unreadCount: unreadCount, // Now this has a real value!
-      orderId: item._id,
-      status: status,
+      message,
+      unreadCount,
+      orderId: order._id,
+      status,
       createdAt: newNotif.createdAt
     });
 
     res.json({
       success: true,
       message: `Order ${status.toLowerCase()} successfully`,
-      data: item
+      data: order
     });
 
   } catch (err) {
-    console.error(" Status Update Error:", err);
+    console.error("Status Update Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
