@@ -2629,6 +2629,12 @@ app.get("/api/orders/:id", auth, async (req, res) => {
         0
       );
 
+      // ✅ FIX: extract proof ONCE here
+      const proof =
+        order.paymentProofsBySeller instanceof Map
+          ? order.paymentProofsBySeller.get(sellerId)
+          : order.paymentProofsBySeller?.[sellerId];
+
       history.push({
         _id: order._id,
         name: order.name,
@@ -2637,24 +2643,27 @@ app.get("/api/orders/:id", auth, async (req, res) => {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         totalPrice,
+
+        // 🔥 THIS is what your frontend needs
+        paymentProof: proof || null,
+
         items: sellerItems.map(item => ({
           _id: item._id,
           product: item.product,
           quantity: item.quantity,
           price: item.price,
-          status: item.status,
-          paymentProof: order.paymentProofsBySeller?.get(sellerId) || null
+          status: item.status
         }))
       });
     }
 
     res.json({ success: true, orders: history });
+
   } catch (err) {
     console.error("History Error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
     app.get("/api/notifications", auth, async (req, res) => {
       try {
         if (!req.userId) {
