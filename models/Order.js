@@ -87,23 +87,12 @@ const OrderSchema = new mongoose.Schema(
       of: String, // sellerId => image path
       default: {}
     },
-
-    notes: {
-      type: String,
-      default: ""
-    },
-
+   
     seen: {
       type: Boolean,
       default: false
     },
 
-    // ✅ OPTIONAL: overall order status (computed or fallback)
-    status: {
-      type: String,
-      enum: ["Pending", "Accepted", "Cancelled"],
-      default: "Pending"
-    }
   },
   { timestamps: true }
 );

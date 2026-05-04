@@ -749,71 +749,112 @@ await Product.create({
     });
   }
 });
-
 app.get("/api/dashboard", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
-    if (!sellerId) return res.json({ success: false, message: "Not Logged In" });
+    if (!sellerId) {
+      return res.json({ success: false, message: "Not Logged In" });
+    }
 
     const seller = await Seller.findById(sellerId);
-    if (!seller) return res.json({ success: false, message: "Seller not found" });
+    if (!seller) {
+      return res.json({ success: false, message: "Seller not found" });
+    }
 
+    // -----------------------------
+    // 1. Total Items (Products/Services/Assets)
+    // -----------------------------
     const totalItemsCount = await Product.countDocuments({
       seller: sellerId,
-      type: seller.sellerType // Matches "Product", "Service", or "Asset"
+      type: seller.sellerType,
     });
 
-    // 1. Calculate Ratings
+    // -----------------------------
+    // 2. Ratings
+    // -----------------------------
     const ratings = await Rating.find({ seller: sellerId });
     const numReviews = ratings.length;
-    const averageRating = numReviews > 0
-      ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
-      : 0;
 
-    // 2. Fetch Data based on Seller Type
+    const averageRating =
+      numReviews > 0
+        ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
+        : 0;
+
+    // -----------------------------
+    // 3. Activity (ORDERS / BOOKINGS)
+    // -----------------------------
     let totalActivityCount = 0;
     let newActivityCount = 0;
 
     if (seller.sellerType === "Service") {
-      // COUNT BOOKINGS for Service Sellers
-      totalActivityCount = await Booking.countDocuments({ seller: sellerId });
-      newActivityCount = await Booking.countDocuments({ seller: sellerId, status: "Pending" });
+      // BOOKINGS (Service sellers)
+      const bookings = await Booking.find({ seller: sellerId });
+
+      totalActivityCount = bookings.length;
+
+      newActivityCount = bookings.reduce((count, b) => {
+        return count + (b.status === "Pending" ? 1 : 0);
+      }, 0);
+
     } else {
-      // COUNT ORDERS for Product Sellers
-      totalActivityCount = await Order.countDocuments({ "items.seller": sellerId });
-      newActivityCount = await Order.countDocuments({ "items.seller": sellerId, status: "Pending" });
+      // ORDERS (Product/Asset sellers)
+
+      const orders = await Order.find({ "items.seller": sellerId });
+
+      totalActivityCount = orders.length;
+
+      // IMPORTANT FIX: item-level counting (NOT order.status)
+      newActivityCount = 0;
+
+      orders.forEach(order => {
+        order.items.forEach(item => {
+          if (
+            item.seller.toString() === sellerId.toString() &&
+            item.status === "Pending"
+          ) {
+            newActivityCount++;
+          }
+        });
+      });
     }
 
-    // 4. Get Views
+    // -----------------------------
+    // 4. Views
+    // -----------------------------
     const totalViews = seller.views || 0;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const todayEntry = seller.dailyViews.find(d =>
-  new Date(d.date).toDateString() === today.toDateString()
-);
+      new Date(d.date).toDateString() === today.toDateString()
+    );
 
     const todayViews = todayEntry ? todayEntry.buyers.length : 0;
 
-    // Current problematic part in your backend:
-    res.json({
+    // -----------------------------
+    // RESPONSE
+    // -----------------------------
+    return res.json({
       success: true,
       seller: {
         ...seller.toObject(),
         totalOrders: totalActivityCount,
-        newOrders: newActivityCount,
-        // averageRating is being calculated, but let's make sure it's inside 'seller'
+        newOrders: newActivityCount, // ✔ now correct item-based count
         averageRating: Number(averageRating.toFixed(1)),
-        numReviews: numReviews,
-        totalItemsCount: totalItemsCount
+        numReviews,
+        totalItemsCount,
       },
       totalViews,
-      todayViews
+      todayViews,
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Dashboard Internal Server Error" });
+    console.error("Dashboard Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Dashboard Internal Server Error",
+    });
   }
 });
 
@@ -2168,7 +2209,7 @@ app.post("/api/cart/add", auth, async (req, res) => {
 });
 app.get("/api/cart", auth, async (req, res) => {
   try {
-    const buyer = await Buyer.findById(req.userId).select("name phone");
+    const buyer = await Buyer.findById(req.userId).select("name phone profile");
 
     const cart = await Cart.findOne({ buyer: req.userId })
       .populate({
@@ -2320,6 +2361,7 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
         seller: sellerId,
         quantity: item.quantity,
         price: item.price,
+        status: "Pending",
         paymentProof: paymentProofsBySeller[sellerId] || null
       };
     });
@@ -2380,63 +2422,61 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
 app.get("/api/seller/orders", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
-    const orders = await Order.find({
 
-      "items.seller": sellerId
-    })
+    const orders = await Order.find({ "items.seller": sellerId })
       .populate("items.product", "name")
-
       .sort({ createdAt: -1 });
-    const filteredOrders = orders.map(order => {
 
-      const sellerItems = order.items.filter(
+    const filteredOrders = orders
+      .map(order => {
+        const sellerItems = order.items.filter(
+          item =>
+            item.seller &&
+            item.seller.toString() === sellerId &&
+            item.status &&
+            item.status === "Pending"
+        );
 
-        item => item.seller.toString() === sellerId
+        if (sellerItems.length === 0) return null;
 
-      );
+        const sellerTotalPrice = sellerItems.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0
+        );
 
-      const sellerTotalPrice = sellerItems.reduce((sum, item) => {
+        return {
+          _id: order._id,
+          name: order.name,
+          phone: order.phone,
+          address: order.address,
+          notes: order.notes,
+          deliveryMethod: order.deliveryMethod,
+          paymentMethod: order.paymentMethod,
+          totalPrice: sellerTotalPrice,
+          createdAt: order.createdAt,
+          paymentProof: order.paymentProofsBySeller instanceof Map 
+    ? order.paymentProofsBySeller.get(sellerId) 
+    : order.paymentProofsBySeller?.[sellerId],
+          items: sellerItems.map(item => ({
+            _id: item._id,
+            product: item.product,
+            quantity: item.quantity,
+            status: item.status,
+            price: item.price
+          }))
+        };
+      })
+      .filter(order => order !== null);
 
-        return sum + (item.price * item.quantity);
-
-      }, 0);
-
-      return {
-
-        _id: order._id,
-
-        status: order.status,
-
-        name: order.name,
-
-        phone: order.phone,
-
-        address: order.address,
-
-        notes: order.notes,
-
-        deliveryMethod: order.deliveryMethod,
-
-        paymentMethod: order.paymentMethod,
-        totalPrice: sellerTotalPrice,
-        createdAt: order.createdAt,
-        // ✅ FIX: pull proof from order.paymentProofsBySeller
-        paymentProof: order.paymentProofsBySeller?.[sellerId] || null,
-        items: sellerItems.map(item => ({
-          _id: item._id,
-
-          product: item.product,
-
-          quantity: item.quantity,
-
-          price: item.price
-        }))
-      };
-    });
     res.json({ success: true, orders: filteredOrders });
+
   } catch (err) {
-    console.error("Seller Orders Error:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch seller orders" });
+    console.error("Seller Orders Error:", err.message);
+    console.error(err.stack);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 });
 app.put("/api/order/status/:id", auth, async (req, res) => {
@@ -2446,49 +2486,33 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
     const { status } = req.body;
 
     const order = await Order.findById(orderId);
-
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // ✅ Get only this seller's items
-    const sellerItems = order.items.filter(
-      i => i.seller.toString() === sellerId
-    );
-
+    // Only this seller's items
+    const sellerItems = order.items.filter(i => i.seller.toString() === sellerId);
     if (sellerItems.length === 0) {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
-    // ✅ Prevent duplicate updates PER SELLER (not global)
+    // Prevent duplicate updates
     const alreadyUpdated = sellerItems.every(i => i.status !== "Pending");
     if (alreadyUpdated) {
-      return res.json({
-        success: false,
-        message: `Already ${sellerItems[0].status}`
-      });
+      return res.json({ success: false, message: `Already ${sellerItems[0].status}` });
     }
 
-    // ✅ UPDATE ONLY THIS SELLER'S ITEMS
+    // Update only this seller's items
     order.items.forEach(i => {
-      if (i.seller.toString() === sellerId) {
+      if (i.seller.toString() === sellerId && i.status === "Pending") {
         i.status = status;
       }
     });
-
-    // ✅ OPTIONAL: recalculate overall order status
-    const allAccepted = order.items.every(i => i.status === "Accepted");
-    const anyCancelled = order.items.some(i => i.status === "Cancelled");
-
-    if (allAccepted) order.status = "Accepted";
-    else if (anyCancelled) order.status = "Cancelled";
-    else order.status = "Pending";
-
+    // Save without forcing global status
     await order.save();
 
-    // ✅ Notification (same as yours)
+    // Notification
     const displayId = order._id.toString().slice(-6).toUpperCase();
-
     const message =
       status === "Accepted"
         ? `Your order #${displayId} item was accepted`
@@ -2517,57 +2541,40 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
       createdAt: newNotif.createdAt
     });
 
-    res.json({
-      success: true,
-      message: `Order ${status.toLowerCase()} successfully`,
-      data: order
-    });
-
+    res.json({ success: true, message: `Order ${status.toLowerCase()} successfully`, data: order });
   } catch (err) {
     console.error("Status Update Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
- //  Add this route to handle fetching a single order by ID
-    app.get("/api/orders/:id", auth, async (req, res) => {
-      try {
-        const orderId = req.params.id;
 
-        // Find the order and populate product details
-        const order = await Order.findById(orderId).populate("items.product");
+app.get("/api/orders/:id", auth, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate("items.product");
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found in database" });
+    }
 
-        if (!order) {
-          return res.status(404).json({
-            success: false,
-            message: "Order not found in database",
-          });
-        }
+    const isBuyer = order.buyer.toString() === req.userId.toString();
+    const isSeller = order.items.some(i => i.seller.toString() === req.userId.toString());
+    if (!isBuyer && !isSeller) {
+      return res.status(403).json({ success: false, message: "Not authorized to view this order" });
+    }
 
-        // Security: Ensure the person requesting is either the Buyer or the Seller of this order
-        const isBuyer = order.buyer.toString() === req.userId.toString();
+    // Compute summary only for buyer
+    if (isBuyer) {
+      const allAccepted = order.items.every(i => i.status === "Accepted");
+      const anyCancelled = order.items.some(i => i.status === "Cancelled");
+      order.status = allAccepted ? "Accepted" : anyCancelled ? "Cancelled" : "Pending";
+    }
 
-        // Check if the seller is involved in any item of this order
-        const isSeller = order.items.some(item => item.seller.toString() === req.userId.toString());
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error("Fetch Order Error:", err);
+    res.status(500).json({ success: false, message: "Server error while fetching order" });
+  }
+});
 
-        if (!isBuyer && !isSeller) {
-          return res.status(403).json({
-            success: false,
-            message: "Not authorized to view this order",
-          });
-        }
-
-        res.json({
-          success: true,
-          order,
-        });
-      } catch (err) {
-        console.error(" Fetch Order Error:", err);
-        res.status(500).json({
-          success: false,
-          message: "Server error while fetching order",
-        });
-      }
-    });
     //  CORRECTED: MARK ALL NOTIFICATIONS AS READ
     app.put("/api/notifications/mark-read", auth, async (req, res) => {
       try {
@@ -2587,6 +2594,59 @@ app.put("/api/order/status/:id", auth, async (req, res) => {
         res.status(500).json({ success: false, message: "Server Error" });
       }
     });
+    app.get("/api/seller/orders/history", auth, async (req, res) => {
+  try {
+    const sellerId = req.userId.toString();
+
+    const orders = await Order.find({
+      "items.seller": sellerId
+    })
+      .populate("items.product", "name")
+      .sort({ createdAt: -1 });
+
+    const history = [];
+
+    for (const order of orders) {
+      const sellerItems = order.items.filter(item => {
+        if (!item.seller) return false;
+        return (
+          item.seller.toString() === sellerId &&
+          (item.status === "Accepted" || item.status === "Cancelled")
+        );
+      });
+
+      if (sellerItems.length === 0) continue;
+
+      const totalPrice = sellerItems.reduce(
+        (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
+        0
+      );
+
+      history.push({
+        _id: order._id,
+        name: order.name,
+        phone: order.phone,
+        address: order.address,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt,
+        totalPrice,
+        items: sellerItems.map(item => ({
+          _id: item._id,
+          product: item.product,
+          quantity: item.quantity,
+          price: item.price,
+          status: item.status,
+          paymentProof: order.paymentProofsBySeller?.get(sellerId) || null
+        }))
+      });
+    }
+
+    res.json({ success: true, orders: history });
+  } catch (err) {
+    console.error("History Error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
     app.get("/api/notifications", auth, async (req, res) => {
       try {
