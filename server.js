@@ -2429,20 +2429,27 @@ app.get("/api/seller/orders", auth, async (req, res) => {
 
     const filteredOrders = orders
       .map(order => {
+        // ✅ Filter only THIS seller's items
         const sellerItems = order.items.filter(
           item =>
             item.seller &&
             item.seller.toString() === sellerId &&
-            item.status &&
             item.status === "Pending"
         );
 
         if (sellerItems.length === 0) return null;
 
+        // ✅ Calculate seller total
         const sellerTotalPrice = sellerItems.reduce(
           (sum, item) => sum + item.price * item.quantity,
           0
         );
+
+        // ✅ Extract payment proof safely
+        const proof =
+          order.paymentProofsBySeller instanceof Map
+            ? order.paymentProofsBySeller.get(sellerId)
+            : order.paymentProofsBySeller?.[sellerId];
 
         return {
           _id: order._id,
@@ -2454,9 +2461,10 @@ app.get("/api/seller/orders", auth, async (req, res) => {
           paymentMethod: order.paymentMethod,
           totalPrice: sellerTotalPrice,
           createdAt: order.createdAt,
-          paymentProof: order.paymentProofsBySeller instanceof Map 
-    ? order.paymentProofsBySeller.get(sellerId) 
-    : order.paymentProofsBySeller?.[sellerId],
+
+          // 🔥 FINAL FIELD USED BY FRONTEND
+          paymentProof: proof || null,
+
           items: sellerItems.map(item => ({
             _id: item._id,
             product: item.product,
@@ -2472,7 +2480,6 @@ app.get("/api/seller/orders", auth, async (req, res) => {
 
   } catch (err) {
     console.error("Seller Orders Error:", err.message);
-    console.error(err.stack);
     res.status(500).json({
       success: false,
       message: err.message
