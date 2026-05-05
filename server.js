@@ -2486,121 +2486,199 @@ app.get("/api/seller/orders", auth, async (req, res) => {
     });
   }
 });
+
 app.put("/api/order/status/:id", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
     const orderId = req.params.id;
     const { status } = req.body;
 
-    const order = await Order.findById(orderId);
+    // 🔒 Validate status
+    if (!["Accepted", "Cancelled"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value",
+      });
+    }
+
+    const order = await Order.findById(orderId).populate("items.product");
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
-    // Only this seller's items
-    const sellerItems = order.items.filter(i => i.seller.toString() === sellerId);
+    // 🔍 Get only this seller's items
+    const sellerItems = order.items.filter(
+      (i) => i.seller.toString() === sellerId
+    );
+
     if (sellerItems.length === 0) {
-      return res.status(403).json({ success: false, message: "Not authorized" });
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
     }
 
-    // Prevent duplicate updates
-    const alreadyUpdated = sellerItems.every(i => i.status !== "Pending");
+    // ❌ Prevent duplicate updates
+    const alreadyUpdated = sellerItems.every(
+      (i) => i.status !== "Pending"
+    );
+
     if (alreadyUpdated) {
-      return res.json({ success: false, message: `Already ${sellerItems[0].status}` });
+      return res.json({
+        success: false,
+        message: `Already ${sellerItems[0].status}`,
+      });
     }
 
-    // Update only this seller's items
-    order.items.forEach(i => {
-      if (i.seller.toString() === sellerId && i.status === "Pending") {
-        i.status = status;
+    // ✅ Update ONLY this seller's pending items
+    const updatedItems = [];
+
+    order.items.forEach((item) => {
+      if (
+        item.seller.toString() === sellerId &&
+        item.status === "Pending"
+      ) {
+        item.status = status;
+        updatedItems.push(item);
       }
     });
-    // Save without forcing global status
+
     await order.save();
 
-    // Notification
+    // 🔥 IMPORTANT FIX: ONE notification per seller (NOT per item)
     const displayId = order._id.toString().slice(-6).toUpperCase();
-    const message =
-      status === "Accepted"
-        ? `Your order #${displayId} item was accepted`
-        : `Your order #${displayId} item was declined`;
 
     const newNotif = await Notification.create({
       recipient: order.buyer,
       sender: sellerId,
-      message,
       orderId: order._id,
+      items: updatedItems, // optional but useful
+      message:
+        status === "Accepted"
+          ? `Your order #${displayId} items were accepted`
+          : `Your order #${displayId} items were cancelled`,
       read: false,
-      category: "Order"
+      category: "Order",
     });
 
-    const unreadCount = await Notification.countDocuments({
-      recipient: order.buyer,
-      read: false
-    });
-
+    // 📡 Emit single notification
     io.to(`Buyer_${order.buyer}`).emit("notification", {
       _id: newNotif._id,
-      message,
-      unreadCount,
+      message: newNotif.message,
       orderId: order._id,
       status,
-      createdAt: newNotif.createdAt
+      createdAt: newNotif.createdAt,
     });
 
-    res.json({ success: true, message: `Order ${status.toLowerCase()} successfully`, data: order });
+    // 🔢 Update unread count ONCE
+    const unreadCount = await Notification.countDocuments({
+      recipient: order.buyer,
+      read: false,
+    });
+
+    io.to(`Buyer_${order.buyer}`).emit("notification_count", {
+      unreadCount,
+    });
+
+    return res.json({
+      success: true,
+      message: `Order ${status.toLowerCase()} successfully`,
+      updatedItems,
+    });
+
   } catch (err) {
     console.error("Status Update Error:", err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
   }
 });
-
 app.get("/api/orders/:id", auth, async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id).populate("items.product");
+    const order = await Order.findById(req.params.id)
+      .populate("items.product")
+      .populate("items.seller");
+
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found in database" });
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
     }
 
-    const isBuyer = order.buyer.toString() === req.userId.toString();
-    const isSeller = order.items.some(i => i.seller.toString() === req.userId.toString());
+    const userId = req.userId.toString();
+
+    const isBuyer = order.buyer.toString() === userId;
+    const isSeller = order.items.some(i => i.seller?.toString() === userId);
+
     if (!isBuyer && !isSeller) {
-      return res.status(403).json({ success: false, message: "Not authorized to view this order" });
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized"
+      });
     }
 
-    // Compute summary only for buyer
-    if (isBuyer) {
-      const allAccepted = order.items.every(i => i.status === "Accepted");
-      const anyCancelled = order.items.some(i => i.status === "Cancelled");
-      order.status = allAccepted ? "Accepted" : anyCancelled ? "Cancelled" : "Pending";
+    // 🔥 SELLER VIEW (ONLY THEIR ITEMS BUT KEEP ORDER INFO)
+    if (isSeller && !isBuyer) {
+      const sellerItems = order.items.filter(
+        i => i.seller?.toString() === userId
+      );
+
+      return res.json({
+        success: true,
+        order: {
+          _id: order._id,
+          name: order.name,
+          phone: order.phone,
+          address: order.address,
+          paymentMethod: order.paymentMethod,
+          createdAt: order.createdAt,
+
+          items: sellerItems,
+          totalPrice: sellerItems.reduce(
+            (sum, i) => sum + i.price * i.quantity,
+            0
+          ),
+
+          status: sellerItems.every(i => i.status === "Accepted")
+            ? "Accepted"
+            : sellerItems.some(i => i.status === "Cancelled")
+            ? "Cancelled"
+            : "Pending"
+        }
+      });
     }
 
-    res.json({ success: true, order });
-  } catch (err) {
-    console.error("Fetch Order Error:", err);
-    res.status(500).json({ success: false, message: "Server error while fetching order" });
-  }
-});
-
-    //  CORRECTED: MARK ALL NOTIFICATIONS AS READ
-    app.put("/api/notifications/mark-read", auth, async (req, res) => {
-      try {
-        // We update based on the 'read' boolean to match your unread-count route
-        const result = await Notification.updateMany(
-          { recipient: req.userId, read: false },
-          { $set: { read: true } }
-        );
-
-        res.json({
-          success: true,
-          message: "Notifications marked as read",
-          modifiedCount: result.modifiedCount
-        });
-      } catch (error) {
-        console.error("Mark Read Error:", error);
-        res.status(500).json({ success: false, message: "Server Error" });
+    // 🔥 BUYER VIEW (FULL DATA ALWAYS CORRECT)
+    return res.json({
+      success: true,
+      order: {
+        _id: order._id,
+        name: order.name,
+        phone: order.phone,
+        address: order.address,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt,
+        items: order.items,
+        totalPrice: order.items.reduce(
+          (sum, i) => sum + i.price * i.quantity,
+          0
+        )
       }
     });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
     app.get("/api/seller/orders/history", auth, async (req, res) => {
   try {
     const sellerId = req.userId.toString();
@@ -2701,6 +2779,26 @@ app.get("/api/orders/:id", auth, async (req, res) => {
         res.json({ success: true, count });
       } catch (err) {
         res.status(500).json({ success: false });
+      }
+    });
+    
+    //  CORRECTED: MARK ALL NOTIFICATIONS AS READ
+    app.put("/api/notifications/mark-read", auth, async (req, res) => {
+      try {
+        // We update based on the 'read' boolean to match your unread-count route
+        const result = await Notification.updateMany(
+          { recipient: req.userId, read: false },
+          { $set: { read: true } }
+        );
+
+        res.json({
+          success: true,
+          message: "Notifications marked as read",
+          modifiedCount: result.modifiedCount
+        });
+      } catch (error) {
+        console.error("Mark Read Error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
       }
     });
 
