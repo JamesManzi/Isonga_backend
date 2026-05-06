@@ -144,6 +144,10 @@ if(!name||!location||!phone||!email||!password||!description||!category||!seller
   })
   return
 }
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if(!emailRegex.test(email)){
+  return res.json({success:false,message:"Invalid Email Try Again"})
+}
     // 1. Basic Checks
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
@@ -245,7 +249,10 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     if(!email||!password){
       return res.json({success:false,message:"All Fields Required"})
     }
-
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailRegex.test(email)){
+      return res.json({success:false,message:"Invalid Email Try Again"});
+    }
     const user = await Seller.findOne({ email });
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
@@ -288,6 +295,10 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
    if (!name || !email || !password || !repeat_pass) {
   res.json({ success: false, message: "All Fields Required" });
   return;
+}
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if(!emailRegex.test(email)){
+  return res.json({success:false,message:"Invalid Email Try Again"});
 }
     const ExistingBuyer = await Buyer.findOne({ email });
     if (ExistingBuyer) {
@@ -562,7 +573,10 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
     if(!email||!password){
       return res.json({success:false,message:"All fields Required"});
     }
-    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailRegex.test(email)){
+      return res.json({success:false,message:"Invalid Email Try Again"})
+    }
     const user = await Buyer.findOne({ email });
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
@@ -607,6 +621,11 @@ app.post("/api/forgot-password", async (req, res) => {
         success: false,
         message: "Email is required"
       });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailRegex.test(email)){
+      return res.json({success:false,message:"Invalid Email Try Again"});
     }
 
     // 1. Find buyer
@@ -906,6 +925,10 @@ app.post("/api/seller/forgot-password", async (req, res) => {
         success: false,
         message: "Email is required"
       });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailRegex.test(password)){
+      return res.json({success:false,message:"Invalid Email Try Again"});
     }
 
     const seller = await Seller.findOne({ email });
