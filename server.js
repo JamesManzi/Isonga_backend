@@ -137,7 +137,13 @@ app.post("/api/register", upload.fields([
 ]), async (req, res) => {
   try {
     const { name, location, phone, email, password, description, category, sellerType,repeat_pass } = req.body;
-
+if(!name||!location||!phone||!email||!password||!description||!category||!sellerType||!repeat_pass){
+  res.json({
+    success:false,
+    message:"All Field Required"
+  })
+  return
+}
     // 1. Basic Checks
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
@@ -236,6 +242,9 @@ const files = req.files.files.map(f => f.path);
 app.post("/api/login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
+    if(!email||!password){
+      return res.json({success:false,message:"All Fields Required"})
+    }
 
     const user = await Seller.findOne({ email });
     if (!user) {
@@ -246,7 +255,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    if(user.isVerified===false){
+    if(!user.isVerified){
       return res.json({success:false,message:"User Email Not Verified"});
     }
     //  CREATE TOKEN
@@ -346,6 +355,9 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
 app.post("/api/seller-verify-email",async(req,res)=>{
   try {
     const {email,code}=req.body;
+    if(!code){
+      return res.json({success:false,message:"Code Required Please!"})
+    }
     const inputCode=String(code).trim();
     let seller=await Seller.findOne({email});
     if(!seller){
@@ -353,7 +365,7 @@ app.post("/api/seller-verify-email",async(req,res)=>{
     }
 
     if(seller.verificationCode!==inputCode){
-      return res.json({success:false,message:"Invalid Code"});
+      return res.json({success:false,message:"Invalid Code Try Again"});
     }
     if(seller.verificationExpires<Date.now()){
       return res.json({success:false,message:"Code Expired"});
@@ -367,7 +379,8 @@ app.post("/api/seller-verify-email",async(req,res)=>{
           verificationCode:null,
           verificationExpires:null
         }
-      }
+      },
+      {new:true}
     );
 
     res.json({success:true});
@@ -380,6 +393,9 @@ app.post("/api/seller-verify-email",async(req,res)=>{
 app.post("/api/buyer-verify-email",async(req,res)=>{
   try {
     const{email,code}=req.body;
+    if(!code){
+      res.json({success:false,message:"Code Required Please!"});
+    }
     const inputCode=String(code).trim();
     let buyer=await Buyer.findOne({email});
     if(!buyer){
@@ -400,7 +416,8 @@ app.post("/api/buyer-verify-email",async(req,res)=>{
           verificationCode:null,
           verificationExpires:null
         }
-      }
+      },
+      {new:true}
     );
     
     res.json({success:true});
@@ -542,7 +559,10 @@ app.post("/api/seller-resend-verification", async (req, res) => {
 app.post("/api/buyer_login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
-
+    if(!email||!password){
+      return res.json({success:false,message:"All fields Required"});
+    }
+    
     const user = await Buyer.findOne({ email });
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
@@ -553,7 +573,7 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
 
-    if(user.isVerified===false){
+    if(!user.isVerified){
       return res.json({success:false,message:"User Email Not Verified"});
     }
 
@@ -609,7 +629,8 @@ app.post("/api/forgot-password", async (req, res) => {
       {
         $set:{
           verificationCode:resetCode,
-          verificationExpires:Date.now() + 5 * 60 * 1000
+          verificationExpires:Date.now() + 5 * 60 * 1000,
+          lastVerificationSent:Date.now(),
         }
       }
     )
@@ -642,7 +663,9 @@ app.post("/api/forgot-password", async (req, res) => {
 app.post("/api/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
-
+    if(!code){
+      return res.json({success:false,message:"Code Required Please!"})
+    }
     const inputCode = String(code).trim();
 
     // 1. Find user first (to validate)
@@ -667,9 +690,7 @@ app.post("/api/reset-password", async (req, res) => {
       return res.json({ success: false, message: "New Password Required" });
     }
 
-    // 2. Hash password
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash(newPassword,12);
 
     // 3. Update using findOneAndUpdate
     await Buyer.findOneAndUpdate(
@@ -678,7 +699,8 @@ app.post("/api/reset-password", async (req, res) => {
         $set: {
           password: hashedPassword,
           verificationCode: null,
-          verificationExpires: null
+          verificationExpires: null,
+          lastVerificationSent:null
         }
       }
     );
@@ -717,7 +739,7 @@ if (req.files && req.files.length > 0) {
     if (file.size > maxSize) {
       return res.json({ 
         success: false, 
-        message: `File ${file.originalname} is too large. Max 10MB per file.` 
+        message: `File ${file.originalname} is too large. Max 20MB per file.` 
       });
     }
   }
@@ -932,6 +954,9 @@ app.post("/api/seller/forgot-password", async (req, res) => {
 
 app.post("/api/seller/verify-reset-code", async (req, res) => {
   const { email, code } = req.body;
+  if(!code){
+    return res.json({success:true,message:"Code Required Please!"})
+  }
   const seller = await Seller.findOne({ email, verificationCode: code });
 
   if (!seller || seller.verificationExpires < Date.now()) {
@@ -943,7 +968,6 @@ app.post("/api/seller/verify-reset-code", async (req, res) => {
 app.post("/api/seller/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
-
     const seller = await Seller.findOne({ email, verificationCode: code });
     if (!seller || seller.verificationExpires < Date.now()) {
       return res.json({ success: false, message: "Invalid or expired code" });
@@ -953,9 +977,10 @@ app.post("/api/seller/reset-password", async (req, res) => {
      if(!rule.test(newPassword)){
       return res.json({success:false,messa:"Weak Password"})
      }
-    // 1. Hash it here
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+     if(!newPassword){
+      return res.json({success:false,message:"New Password Required!"})
+     }
+    const hashedPassword = await bcrypt.hash(newPassword,12);
 
     await Seller.findOneAndUpdate(
       { _id: seller._id }, 
@@ -1239,7 +1264,6 @@ app.delete("/api/products/delete/:productId", auth, async (req, res) => {
   }
 });
 
-
 app.get("/api/buyer_profile/update", auth, async (req, res) => {
   try {
 
@@ -1299,13 +1323,6 @@ if (!regex.test(req.body.phone)) {
           ...newImages
         ];
       }
-
-      if (!req.body.name || !req.body.phone) {
-  return res.status(400).json({
-    success: false,
-    message: "Required fields missing"
-  });
-}
       // =============================
       //  SAVE UPDATE
       // =============================
@@ -1411,6 +1428,7 @@ app.delete("/api/delete_location_image/:public_id", auth, async (req, res) => {
     });
   }
 });
+
 app.get("/api/product_views", auth, async (req, res) => {
   try {
     const result = await Product.aggregate([

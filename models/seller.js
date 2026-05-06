@@ -13,6 +13,10 @@ const sellerSchema = new mongoose.Schema({
        type: Boolean,
         default: false 
       },
+      lastVerificationSent:{
+        type:Date,
+        default:null
+      },
 verificationCode: String,
 verificationExpires: Date,
     category: { type: String, required: true },
