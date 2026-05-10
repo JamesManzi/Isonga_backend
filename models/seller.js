@@ -13,6 +13,14 @@ const sellerSchema = new mongoose.Schema({
        type: Boolean,
         default: false 
       },
+      failedAttempts:{
+        type:Number,
+        default:0
+      },
+      lockUntil:{
+        type:Date,
+        default:null
+      },
       lastVerificationSent:{
         type:Date,
         default:null

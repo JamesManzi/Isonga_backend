@@ -24,6 +24,14 @@ const storage = new CloudinaryStorage({
   },
 });
 
+const fileFilter=(req,file,cb)=>{
+  if(file.mimetype.startsWith("image/")||file.mimetype.startsWith("video/")){
+    cb(null,true)
+  } else{
+    cb(new Error("File not Allowed Only Video And Image Allowed"),false)
+  }
+}
+
 const upload = multer({ storage });
 
 module.exports = { cloudinary, storage, upload };

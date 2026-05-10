@@ -18,6 +18,14 @@ const buyerSchema=new mongoose.Schema({
         type:String,
         required:true
     },
+    failedAttempts:{
+        type:Number,
+        default:0
+    },
+    lockUntil:{
+        type:Date,
+        default:null
+    },
     isVerified: {
          type: Boolean,
           default: false 

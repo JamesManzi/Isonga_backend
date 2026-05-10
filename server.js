@@ -163,6 +163,9 @@ if(!emailRegex.test(email)){
     message: "Profile image: 5MB Max Allowed"
   });
 }
+if(!profileFile.mimetype.startsWith("image/")){
+  return res.json({success:false,message:"Only Images Allowed"});
+}
 const profile = profileFile.path;
 
 const fileSize = 10 * 1024 * 1024; // 10MB
@@ -180,6 +183,12 @@ for (let file of req.files.files) {
       success: false,
       message: `Each file must be under 10MB`
     });
+  }
+}
+
+for(let file of req.files.files){
+  if(!file.mimetype.startsWith("image/")){
+    return res.json({success:false,message:"Only Images Required"})
   }
 }
 
@@ -257,11 +266,38 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      return res.json({ success: false, message: "Invalid Credentials" });
+    if(user.lockUntil&&user.lockUntil>Date.now()){
+      const remaining=Math.ceil((user.lockUntil-Date.now())/1000);
+      return res.json({
+        success:false,
+        message:`Account Locked For ${remaining}s`,
+        remaining
+      })
     }
 
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      user.failedAttempts+=1;
+       const maxAttempts=5;
+       const lockDuration=30*1000;
+      if(user.failedAttempts>=maxAttempts){
+        user.lockUntil=Date.now()+lockDuration;
+      }
+      await user.save();
+      const attemptsLeft=maxAttempts-user.failedAttempts;
+      return res.json({
+        success:false,
+        message:attemptsLeft<=0
+        ?"Too many attempts. Please try again later."
+        :`Invalid credentials. Attempts left: ${attemptsLeft}`,
+        remaining:attemptsLeft<=0
+        ?Math.ceil(lockDuration/1000)
+        :null
+      })
+    }
+    user.failedAttempts=0;
+    user.lockUntil=null;
+    await user.save();
     if(!user.isVerified){
       return res.json({success:false,message:"User Email Not Verified"});
     }
@@ -581,16 +617,43 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
+    if(user.lockUntil&&user.lockUntil>Date.now()){
+      const remaining=Math.ceil((user.lockUntil-Date.now())/1000);
+      return res.json({
+        success:false,
+        message:`Account Locked for ${remaining}s`,
+        remaining
+      })
+    }
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      return res.json({ success: false, message: "Invalid Credentials" });
-    }
-
+      const maxAttempts=5;
+      const lockDuration=30*1000;
+      user.failedAttempts+=1;
+      if(user.failedAttempts>=maxAttempts){
+        user.lockUntil=Date.now()+lockDuration;
+      }
+     await user.save();
+     const attemptsLeft=maxAttempts-user.failedAttempts;
+     return res.json({
+      success:false,
+      message:attemptsLeft<=0
+      ?"Too many attempts. Please try again later."
+      :`Invalid credentials. Attempts left:${attemptsLeft}`,
+      remaining:attemptsLeft<=0
+      ?Math.ceil(lockDuration/1000)
+      :null
+     });
+    };
+  
     if(!user.isVerified){
       return res.json({success:false,message:"User Email Not Verified"});
     }
+     user.failedAttempts=0;
+    user.lockUntil=null;
 
+    await user.save();
     const token = jwt.sign(
       { id: user._id, role: "buyer" },
       process.env.JWT_SECRET,
@@ -606,7 +669,6 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
         isVerified: user.isVerified
       }
     });
-
   } catch (error) {
     res.status(500).json({ success: false });
   }
@@ -1503,11 +1565,6 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
 
   console.log("New socket connected:", socket.id);
-
-  // =========================
-  // USER ONLINE
-  // ==================
-  // BACKEND: updated userOnline listener
 socket.on("userOnline", (data) => {
   // 1. Get the ID and Model from the data sent by the Frontend
   const { userId, userModel } = data;
@@ -1549,10 +1606,7 @@ socket.on("userOnline", (data) => {
     console.log(`Socket ${socket.id} joined room: ${room}`);
   });
 
-  // ====
-  // =========================
-  // SEND MESSAGE (UPDATED FOR REAL-TIME NOTIFS)
-  // =========================
+  
   socket.on("sendMessage", async (data) => {
     try {
       const {
