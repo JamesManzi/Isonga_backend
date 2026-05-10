@@ -342,10 +342,11 @@ const isAdmin = (req, res, next) => {
 // Replace your existing /admin/dashboard route with this:
 app.get("/admin/dashboard", auth, isAdmin, async (req, res) => {
   try {
-    const [buyerCount, sellerCount, totalOrders] = await Promise.all([
+    const [buyerCount, sellerCount, totalOrders,totalProducts] = await Promise.all([
       Buyer.countDocuments(),
       Seller.countDocuments(),
-      Order.countDocuments()
+      Order.countDocuments(),
+      Product.countDocuments()
     ]);
 
     res.json({
