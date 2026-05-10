@@ -252,6 +252,7 @@ const files = req.files.files.map(f => f.path);
   }
 });
 
+
 app.post("/api/login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -303,7 +304,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     }
     //  CREATE TOKEN
     const token = jwt.sign(
-      { id: user._id, role: "seller" },
+      { id: user._id, role:user.role},
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -324,7 +325,108 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
+export const isAdmin = (req, res, next) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Admin only."
+      });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+app.get("/admin/dashboard", auth, isAdmin, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalSellers = await User.countDocuments({ role: "seller" });
+    const totalOrders = await Order.countDocuments();
 
+    res.json({
+      totalUsers,
+      totalSellers,
+      totalOrders
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+app.get("/admin/users", auth, isAdmin, async (req, res) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      users
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.put("/admin/block-user/:id", auth, isAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.json({ success: false, message: "User not found" });
+    }
+
+    user.isBlocked = !user.isBlocked;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: user.isBlocked ? "User blocked" : "User unblocked"
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+app.delete("/admin/delete-user/:id", auth, isAdmin, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true,
+      message: "User deleted"
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+app.get("/admin/sellers", auth, isAdmin, async (req, res) => {
+  try {
+    const sellers = await User.find({ role: "seller" });
+
+    res.json({
+      success: true,
+      sellers
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+app.get("/admin/sellers", auth, isAdmin, async (req, res) => {
+  try {
+    const sellers = await User.find({ role: "seller" });
+
+    res.json({
+      success: true,
+      sellers
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
     const { name, email, password,repeat_pass} = req.body;

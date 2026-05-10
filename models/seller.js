@@ -13,6 +13,11 @@ const sellerSchema = new mongoose.Schema({
        type: Boolean,
         default: false 
       },
+      role:{
+        type:String,
+        enum:["seller","admin"],
+        default:"seller"
+      },
       failedAttempts:{
         type:Number,
         default:0
