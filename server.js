@@ -325,9 +325,9 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
-export const isAdmin = (req, res, next) => {
+const isAdmin = (req, res, next) => {
   try {
-    if (req.user.role !== "admin") {
+    if (req.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Access denied. Admin only."
@@ -335,9 +335,11 @@ export const isAdmin = (req, res, next) => {
     }
     next();
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
+module.exports = isAdmin;
 app.get("/admin/dashboard", auth, isAdmin, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
