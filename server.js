@@ -339,38 +339,40 @@ const isAdmin = (req, res, next) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-
-module.exports = isAdmin;
+// Replace your existing /admin/dashboard route with this:
 app.get("/admin/dashboard", auth, isAdmin, async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const totalSellers = await User.countDocuments({ role: "seller" });
-    const totalOrders = await Order.countDocuments();
+    const [buyerCount, sellerCount, totalOrders] = await Promise.all([
+      Buyer.countDocuments(),
+      Seller.countDocuments(),
+      Order.countDocuments()
+    ]);
 
     res.json({
-      totalUsers,
-      totalSellers,
-      totalOrders
+      totalUsers: buyerCount + sellerCount,
+      totalSellers: sellerCount,
+      totalOrders: totalOrders
     });
-
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Replace your /admin/users route with this:
 app.get("/admin/users", auth, isAdmin, async (req, res) => {
   try {
-    const users = await User.find().sort({ createdAt: -1 });
+    // Fetch both and combine them, or just fetch one type depending on your needs
+    const buyers = await Buyer.find().select("-password").sort({ createdAt: -1 });
+    const sellers = await Seller.find().select("-password").sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      users
+      users: [...buyers, ...sellers]
     });
-
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 app.put("/admin/block-user/:id", auth, isAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
