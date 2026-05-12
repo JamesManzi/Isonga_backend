@@ -60,7 +60,6 @@ const io = new Server(httpServer, {
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      console.log("Blocked origin:", origin);
     return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE"],
@@ -326,113 +325,382 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     res.status(500).json({ success: false, message: "Login Error" });
   }
 });
+/* ====================================================== */
+/* ADMIN MIDDLEWARE */
+/* ====================================================== */
+
 const isAdmin = (req, res, next) => {
+
   try {
-    if (req.role !== "admin") {
+
+    // auth middleware should attach req.user
+
+    if (!req.user) {
+
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+
+    }
+
+    // safer role check
+
+    if (req.user.role !== "admin") {
+
       return res.status(403).json({
         success: false,
-        message: "Access denied. Admin only."
+        message: "Access denied. Admin only.",
       });
+
     }
+
     next();
+
   } catch (err) {
-    return res.status(500).json({ message: "Server error" });
+
+    console.log("Admin middleware error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+
   }
+
 };
-// Replace your existing /admin/dashboard route with this:
-app.get("/admin/dashboard", auth, isAdmin, async (req, res) => {
-  try {
-    const [buyerCount, sellerCount, totalOrders,totalProducts] = await Promise.all([
-      Buyer.countDocuments(),
-      Seller.countDocuments(),
-      Order.countDocuments(),
-      Product.countDocuments()
-    ]);
 
-    res.json({
-      totalUsers: buyerCount + sellerCount,
-      totalSellers: sellerCount,
-      totalOrders: totalOrders
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
-});
+/* ====================================================== */
+/* ADMIN DASHBOARD */
+/* ====================================================== */
 
-// Replace your /admin/users route with this:
-app.get("/admin/users", auth, isAdmin, async (req, res) => {
-  try {
-    // Fetch both and combine them, or just fetch one type depending on your needs
-    const buyers = await Buyer.find().select("-password").sort({ createdAt: -1 });
-    const sellers = await Seller.find().select("-password").sort({ createdAt: -1 });
+app.get(
+  "/api/admin/dashboard",
+  auth,
+  isAdmin,
+  async (req, res) => {
 
-    res.json({
-      success: true,
-      users: [...buyers, ...sellers]
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
-});
-app.put("/admin/block-user/:id", auth, isAdmin, async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
+    try {
 
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
+      const [
+        buyerCount,
+        sellerCount,
+        totalOrders,
+        totalProducts,
+      ] = await Promise.all([
+        Buyer.countDocuments(),
+        Seller.countDocuments(),
+        Order.countDocuments(),
+        Product.countDocuments(),
+      ]);
+
+      /* ---------------- TOTAL REVENUE ---------------- */
+
+      const revenueResult = await Order.aggregate([
+        {
+          $match: {
+            paymentStatus: "Paid",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: {
+              $sum: "$totalPrice",
+            },
+          },
+        },
+      ]);
+
+      const totalRevenue =
+        revenueResult.length > 0
+          ? revenueResult[0].totalRevenue
+          : 0;
+
+      res.status(200).json({
+        success: true,
+
+        totalUsers: buyerCount + sellerCount,
+
+        totalSellers: sellerCount,
+
+        totalOrders,
+
+        totalProducts,
+
+        totalRevenue,
+      });
+
+    } catch (err) {
+
+      console.log("Dashboard Error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+
     }
 
-    user.isBlocked = !user.isBlocked;
-    await user.save();
-
-    res.json({
-      success: true,
-      message: user.isBlocked ? "User blocked" : "User unblocked"
-    });
-
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
   }
-});
-app.delete("/admin/delete-user/:id", auth, isAdmin, async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.params.id);
+);
 
-    res.json({
-      success: true,
-      message: "User deleted"
-    });
+/* ====================================================== */
+/* GET USERS */
+/* ====================================================== */
 
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
+app.get(
+  "/api/admin/users",
+  auth,
+  isAdmin,
+  async (req, res) => {
+
+    try {
+
+      const limit = Number(req.query.limit) || 20;
+
+      /* ---------------- BUYERS ---------------- */
+
+      const buyers = await Buyer.find()
+        .select("-password")
+        .sort({ createdAt: -1 })
+        .limit(limit);
+
+      /* ---------------- SELLERS ---------------- */
+
+      const sellers = await Seller.find()
+        .select("-password")
+        .sort({ createdAt: -1 })
+        .limit(limit);
+
+      /* ---------------- ADD TYPE ---------------- */
+
+      const formattedBuyers = buyers.map((buyer) => ({
+        ...buyer._doc,
+        userType: "buyer",
+      }));
+
+      const formattedSellers = sellers.map((seller) => ({
+        ...seller._doc,
+        userType: "seller",
+      }));
+
+      /* ---------------- MERGE + SORT ---------------- */
+
+      const users = [
+        ...formattedBuyers,
+        ...formattedSellers,
+      ].sort(
+        (a, b) =>
+          new Date(b.createdAt) -
+          new Date(a.createdAt)
+      );
+
+      res.status(200).json({
+        success: true,
+        users,
+      });
+
+    } catch (err) {
+
+      console.log("Users Error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+
+    }
+
   }
-});
-app.get("/admin/sellers", auth, isAdmin, async (req, res) => {
-  try {
-    const sellers = await User.find({ role: "seller" });
+);
 
-    res.json({
-      success: true,
-      sellers
-    });
+/* ====================================================== */
+/* BLOCK / UNBLOCK USER */
+/* ====================================================== */
 
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
+app.put(
+  "/api/admin/block-user/:id",
+  auth,
+  isAdmin,
+  async (req, res) => {
+
+    try {
+
+      let user = await Buyer.findById(req.params.id);
+
+      let userModel = "Buyer";
+
+      // if not buyer, check seller
+
+      if (!user) {
+
+        user = await Seller.findById(req.params.id);
+
+        userModel = "Seller";
+
+      }
+
+      if (!user) {
+
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+
+      }
+
+      // toggle block status
+
+      user.isBlocked = !user.isBlocked;
+
+      await user.save();
+
+      res.status(200).json({
+        success: true,
+        message: user.isBlocked
+          ? `${userModel} blocked successfully`
+          : `${userModel} unblocked successfully`,
+        isBlocked: user.isBlocked,
+      });
+
+    } catch (err) {
+
+      console.log("Block Error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+
+    }
+
   }
-});
-app.get("/admin/sellers", auth, isAdmin, async (req, res) => {
-  try {
-    const sellers = await User.find({ role: "seller" });
+);
 
-    res.json({
-      success: true,
-      sellers
-    });
+/* ====================================================== */
+/* DELETE USER */
+/* ====================================================== */
 
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
+app.delete(
+  "/api/admin/delete-user/:id",
+  auth,
+  isAdmin,
+  async (req, res) => {
+
+    try {
+
+      let deletedUser =
+        await Buyer.findByIdAndDelete(req.params.id);
+
+      // if not buyer, delete seller
+
+      if (!deletedUser) {
+
+        deletedUser =
+          await Seller.findByIdAndDelete(req.params.id);
+
+      }
+
+      if (!deletedUser) {
+
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "User deleted successfully",
+      });
+
+    } catch (err) {
+
+      console.log("Delete Error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+
+    }
+
   }
-});
+);
+
+/* ====================================================== */
+/* GET SELLERS */
+/* ====================================================== */
+
+app.get(
+  "/api/admin/sellers",
+  auth,
+  isAdmin,
+  async (req, res) => {
+
+    try {
+
+      const sellers = await Seller.find()
+        .select("-password")
+        .sort({ createdAt: -1 });
+
+      res.status(200).json({
+        success: true,
+        sellers,
+      });
+
+    } catch (err) {
+
+      console.log("Seller Error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+
+    }
+
+  }
+);
+
+/* ====================================================== */
+/* GET RECENT ORDERS */
+/* ====================================================== */
+
+app.get(
+  "/api/admin/orders",
+  auth,
+  isAdmin,
+  async (req, res) => {
+
+    try {
+
+      const limit = Number(req.query.limit) || 10;
+
+      const orders = await Order.find()
+        .sort({ createdAt: -1 })
+        .limit(limit);
+
+      res.status(200).json({
+        success: true,
+        orders,
+      });
+
+    } catch (err) {
+
+      console.log("Orders Error:", err);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+
+    }
+
+  }
+);
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
     const { name, email, password,repeat_pass} = req.body;
@@ -774,7 +1042,8 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        isVerified: user.isVerified
+        isVerified: user.isVerified,
+        role:user.role
       }
     });
   } catch (error) {
