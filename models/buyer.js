@@ -22,6 +22,11 @@ const buyerSchema=new mongoose.Schema({
         type:Number,
         default:0
     },
+    role:{
+        type:String,
+        enum:["buyer","admin"],
+        default:"buyer"
+    },
     lockUntil:{
         type:Date,
         default:null

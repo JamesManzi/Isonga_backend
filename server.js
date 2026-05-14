@@ -60,6 +60,7 @@ const io = new Server(httpServer, {
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      console.log("Blocked origin",origin);
     return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE"],
@@ -86,7 +87,7 @@ const ipLimiter = rateLimit({
 
 const emailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
-  max: 5, // strict for login
+  max: 10, // strict for login
   message: {
     success: false,
     message: "Too many login attempts for this account"
@@ -149,7 +150,9 @@ if(!emailRegex.test(email)){
 }
     // 1. Basic Checks
     const existingSeller = await Seller.findOne({ email });
-    if (existingSeller) return res.json({ success: false, message: "User Already Exists" });
+    if (existingSeller) {
+      return res.json({ success: false, message: "User Already Exists" });
+    }
       
     const profileMaxSize = 5 * 1024 * 1024;
     if (!req.files || !req.files.profile) {
@@ -175,7 +178,12 @@ if (!req.files || !req.files.files || req.files.files.length < 2) {
     message: "Location Images Required (min 2)"
   });
 }
-
+if(req.files.files.length>6){
+  return res.json({
+    success:false,
+   message: "You can upload a maximum of 6 files"
+  })
+}
 for (let file of req.files.files) {
   if (file.size > fileSize) {
     return res.json({
@@ -222,7 +230,6 @@ const files = req.files.files.map(f => f.path);
       return res.status(500).json({ success: false, message: "Email service failed" });
     }
 
-    // 5. Create Seller (Unverified)
     await Seller.create({
       name,
       profile,
@@ -252,6 +259,112 @@ const files = req.files.files.map(f => f.path);
 });
 
 
+app.post("/api/seller-verify-email",async(req,res)=>{
+  try {
+    const {email,code}=req.body;
+    if(!code){
+      return res.json({success:false,message:"Code Required Please!"})
+    }
+    const inputCode=String(code).trim();
+    let seller=await Seller.findOne({email});
+    if(!seller){
+      return res.json({success:false,message:"Seller  Not Found"});
+    }
+
+    if(seller.verificationCode!==inputCode){
+      return res.json({success:false,message:"Invalid Code Try Again"});
+    }
+    if(seller.verificationExpires<Date.now()){
+      return res.json({success:false,message:"Code Expired"});
+    }
+
+    await Seller.findOneAndUpdate(
+      {email},
+      {
+        $set:{
+          isVerified:true,
+          verificationCode:null,
+          verificationExpires:null
+        }
+      },
+      {new:true}
+    );
+
+    res.json({success:true});
+  } catch (error) {
+    console.log("email error",error);
+    res.json({success:false,message:"Email Verifying Error"});
+  }
+})
+
+
+app.post("/api/seller-resend-verification", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.json({ success: false, message: "Email Required" });
+    }
+
+    const seller = await Seller.findOne({ email });
+    if (!seller) {
+      return res.json({ success: false, message: "Seller Not Found" });
+    }
+
+    if (seller.isVerified) {
+      return res.json({ success: false, message: "User Verified. Login Please!" });
+    }
+
+    // Rate limiting check 
+    if (
+      seller.lastVerificationSent &&
+      Date.now() - seller.lastVerificationSent < 60000
+    ) {
+      return res.status(429).json({
+        success: false,
+        message: "Please wait  before requesting again"
+      });
+    }
+
+    // Generate new code
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    await Seller.findOneAndUpdate(
+  { email },
+  {
+    $set: {
+      verificationCode: newCode,
+      verificationExpires: Date.now() + 10 * 60 * 1000,
+      lastVerificationSent: Date.now(),
+    }
+  },
+  {new:true}
+);
+
+    // Send email using the CORRECT variables
+    const { error } = await resend.emails.send({
+      from: "Isonga Market <noreply@isongamarket.com>",
+      to: email,
+      subject: "Your New Verification Code",
+      // FIXED: Using seller.name and the newCode variable defined above
+      html: verifyEmailTemplate(seller.name || "Seller", newCode), 
+    });
+
+    if (error) {
+      console.error("Resend Email Error:", error);
+      return res.status(500).json({ success: false, message: "Email service failed" });
+    }
+
+    return res.json({
+      success: true,
+      message: "New verification code sent successfully!"
+    });
+
+  } catch (error) {
+    console.error("Resend Route Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+
 app.post("/api/login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -266,7 +379,8 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     if (!user) {
       return res.json({ success: false, message: "Invalid Credentials" });
     }
-    if(user.lockUntil&&user.lockUntil>Date.now()){
+    
+      if(user.lockUntil&&user.lockUntil>Date.now()){
       const remaining=Math.ceil((user.lockUntil-Date.now())/1000);
       return res.json({
         success:false,
@@ -274,17 +388,19 @@ app.post("/api/login", emailLimiter, async (req, res) => {
         remaining
       })
     }
-
-    const match = await bcrypt.compare(password, user.password);
+      const match = await bcrypt.compare(password, user.password);
     if (!match) {
       user.failedAttempts+=1;
-       const maxAttempts=5;
-       const lockDuration=30*1000;
+       const maxAttempts=7;
+       const lockDuration=15*60*1000
+       let attemptsLeft=maxAttempts-user.failedAttempts;
       if(user.failedAttempts>=maxAttempts){
         user.lockUntil=Date.now()+lockDuration;
+        user.failedAttempts=0;
+        attemptsLeft=0;
       }
       await user.save();
-      const attemptsLeft=maxAttempts-user.failedAttempts;
+
       return res.json({
         success:false,
         message:attemptsLeft<=0
@@ -295,6 +411,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
         :null
       })
     }
+     
     user.failedAttempts=0;
     user.lockUntil=null;
     await user.save();
@@ -324,7 +441,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: "Login Error" });
   }
-});
+})
 /* ====================================================== */
 /* ADMIN MIDDLEWARE */
 /* ====================================================== */
@@ -775,43 +892,6 @@ if(!emailRegex.test(email)){
   }
 });
 
-app.post("/api/seller-verify-email",async(req,res)=>{
-  try {
-    const {email,code}=req.body;
-    if(!code){
-      return res.json({success:false,message:"Code Required Please!"})
-    }
-    const inputCode=String(code).trim();
-    let seller=await Seller.findOne({email});
-    if(!seller){
-      return res.json({success:false,message:"Seller  Not Found"});
-    }
-
-    if(seller.verificationCode!==inputCode){
-      return res.json({success:false,message:"Invalid Code Try Again"});
-    }
-    if(seller.verificationExpires<Date.now()){
-      return res.json({success:false,message:"Code Expired"});
-    }
-
-    await Seller.findOneAndUpdate(
-      {email},
-      {
-        $set:{
-          isVerified:true,
-          verificationCode:null,
-          verificationExpires:null
-        }
-      },
-      {new:true}
-    );
-
-    res.json({success:true});
-  } catch (error) {
-    console.log("email error",error);
-    res.json({success:false,message:"Email Verifying Error"});
-  }
-})
 
 app.post("/api/buyer-verify-email",async(req,res)=>{
   try {
@@ -887,7 +967,8 @@ await Buyer.findOneAndUpdate(
       verificationExpires: Date.now() + 10 * 60 * 1000, // 10 minutes
       lastVerificationSent: Date.now()
     }
-  }
+  },
+  {new:true}
 );
 
     // FIXED: Use buyer.name and newCode (matching your variables)
@@ -914,71 +995,6 @@ await Buyer.findOneAndUpdate(
   }
 });
 
-app.post("/api/seller-resend-verification", async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.json({ success: false, message: "Email Required" });
-    }
-
-    const seller = await Seller.findOne({ email });
-    if (!seller) {
-      return res.json({ success: false, message: "Seller Not Found" });
-    }
-
-    if (seller.isVerified) {
-      return res.json({ success: false, message: "User Verified. Login Please!" });
-    }
-
-    // Rate limiting check 
-    if (
-      seller.lastVerificationSent &&
-      Date.now() - seller.lastVerificationSent < 60000
-    ) {
-      return res.status(429).json({
-        success: false,
-        message: "Please wait before requesting again"
-      });
-    }
-
-    // Generate new code
-    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    await Seller.findOneAndUpdate(
-  { email },
-  {
-    $set: {
-      verificationCode: newCode,
-      verificationExpires: Date.now() + 10 * 60 * 1000,
-      lastVerificationSent: Date.now(),
-    }
-  }
-);
-
-    // Send email using the CORRECT variables
-    const { error } = await resend.emails.send({
-      from: "Isonga Market <noreply@isongamarket.com>",
-      to: email,
-      subject: "Your New Verification Code",
-      // FIXED: Using seller.name and the newCode variable defined above
-      html: verifyEmailTemplate(seller.name || "Seller", newCode), 
-    });
-
-    if (error) {
-      console.error("Resend Email Error:", error);
-      return res.status(500).json({ success: false, message: "Email service failed" });
-    }
-
-    return res.json({
-      success: true,
-      message: "New verification code sent successfully!"
-    });
-
-  } catch (error) {
-    console.error("Resend Route Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
 app.post("/api/buyer_login", emailLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -1001,17 +1017,18 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
         remaining
       })
     }
-
-    const match = await bcrypt.compare(password, user.password);
+      const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      const maxAttempts=5;
-      const lockDuration=30*1000;
+      const maxAttempts=7;
+      const lockDuration=15*60*1000;
+      let attemptsLeft=maxAttempts-user.failedAttempts;
       user.failedAttempts+=1;
       if(user.failedAttempts>=maxAttempts){
         user.lockUntil=Date.now()+lockDuration;
+        user.failedAttempts=0;
+        attemptsLeft=0;
       }
      await user.save();
-     const attemptsLeft=maxAttempts-user.failedAttempts;
      return res.json({
       success:false,
       message:attemptsLeft<=0
@@ -1022,7 +1039,7 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
       :null
      });
     };
-  
+   
     if(!user.isVerified){
       return res.json({success:false,message:"User Email Not Verified"});
     }
@@ -1078,9 +1095,7 @@ app.post("/api/forgot-password", async (req, res) => {
     }
 
     // 2. Generate OTP
-    const resetCode = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await Buyer.findOneAndUpdate(
       {email},
@@ -1090,7 +1105,8 @@ app.post("/api/forgot-password", async (req, res) => {
           verificationExpires:Date.now() + 5 * 60 * 1000,
           lastVerificationSent:Date.now(),
         }
-      }
+      },
+      {new:true}
     )
     // 4. Safe name fallback
     const name = buyer.name || "User";
@@ -1142,7 +1158,7 @@ app.post("/api/reset-password", async (req, res) => {
     }
     const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
      if(!rule.test(newPassword)){
-      return res.json({success:false,messa:"Weak Password"})
+      return res.json({success:false,messa:"Please use strong password!"})
      }
     if (!newPassword) {
       return res.json({ success: false, message: "New Password Required" });
@@ -1160,7 +1176,8 @@ app.post("/api/reset-password", async (req, res) => {
           verificationExpires: null,
           lastVerificationSent:null
         }
-      }
+      },
+      {new:true}
     );
 
     res.json({ success: true, message: "Password updated successfully!" });
@@ -1176,8 +1193,17 @@ app.post("/api/verify-reset-code", async (req, res) => {
   const user = await Buyer.findOne({ email, verificationCode: code }) ||
     await Seller.findOne({ email, verificationCode: code });
 
-  if (!user || user.verificationExpires < Date.now()) {
-    return res.json({ success: false, message: "Invalid code" });
+  if(!user){
+    return res.json({
+      success:false,
+      message:"User not found!"
+    })
+  }
+  if(user.verificationExpires<Date.now()){
+    return res.json({
+      success:false,
+      message:"Code Expired"
+    })
   }
   res.json({ success: true }); // Move to step 3
 });
@@ -1202,6 +1228,21 @@ if (req.files && req.files.length > 0) {
     }
   }
 
+  if(req.files.length>10){
+    return res.json({
+      success:false,
+      message:"Only 10 Files Allowed"
+    })
+  }
+
+  for(let file of req.files){
+   if(!file.mimetype.startsWith("image/")&&!file.mimetype.startsWith("video/")){
+    return res.json({
+      success:false,
+      message:"Only Images And videos required"
+    })
+   }
+  }
   // 3. If all sizes are okay, map the paths
   files = req.files.map(file => file.path);
 }
@@ -1229,6 +1270,7 @@ await Product.create({
     });
   }
 });
+
 app.get("/api/dashboard", auth, async (req, res) => {
   try {
     const sellerId = req.userId;
@@ -1252,12 +1294,18 @@ app.get("/api/dashboard", auth, async (req, res) => {
     // -----------------------------
     // 2. Ratings
     // -----------------------------
-    const ratings = await Rating.find({ seller: sellerId });
+    const ratings = await Rating.find({ 
+      seller: sellerId
+     });
     const numReviews = ratings.length;
 
-    const averageRating =
-      numReviews > 0
-        ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
+    const totalRating=ratings.reduce((sum,item)=>{
+      return sum+item.rating
+    },0);
+
+
+    const averageRating =numReviews > 0
+        ? totalRating/numReviews
         : 0;
 
     // -----------------------------
@@ -1340,9 +1388,10 @@ app.get("/api/dashboard", auth, async (req, res) => {
 
 app.get("/api/my_store", auth, async (req, res) => {
   try {
+    const sellerId=req.userId;
 
-    const products = await Product.find({ seller: req.userId });
-    const seller = await Seller.findById(req.userId).select("name");
+    const products = await Product.find({ seller: sellerId });
+    const seller = await Seller.findById(sellerId).select("name");
 
     res.json({
       success: true,
@@ -1388,7 +1437,8 @@ app.post("/api/seller/forgot-password", async (req, res) => {
           verificationCode:resetCode,
           verificationExpires:Date.now() + 5 * 60 * 1000
         }
-      }
+      },
+      {new:true}
     );
 
     const name = seller.name || "Seller";
@@ -1452,7 +1502,8 @@ app.post("/api/seller/reset-password", async (req, res) => {
           verificationCode: null,
           verificationExpires: null 
         } 
-      }
+      },
+      {new:true}
     );
 
     res.json({ success: true, message: "Seller password updated!" });
@@ -1475,13 +1526,15 @@ app.get("/api/seller_profile", auth, async (req, res) => {
     const ratings = await Rating.find({ seller: seller._id })
       .populate("buyer", "name profile") //  populate profile too
       .sort({ createdAt: -1 });
+      const numReviews=ratings.length
+      const totalRating=ratings.reduce((sum,r)=>{
+        return sum+r.rating
+      },0)
 
-    // Calculate average rating
-    const averageRating = ratings.length
-      ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
-      : 0;
-
-    // Return seller with ratings & review info
+      const averageRating=numReviews>0
+      ?totalRating/numReviews
+      :0
+  
     res.json({
       success: true,
       seller: {
@@ -1591,7 +1644,9 @@ app.get("/api/view_products/:id", auth, async (req, res) => {
 
     const updatedSeller = await Seller.findByIdAndUpdate(
       sellerId,
-      { $inc: { views: 1 } },
+      {
+         $inc: { views: 1 } 
+        },
       { new: true }
     );
 
@@ -1626,14 +1681,35 @@ app.get("/api/view_products/:id", auth, async (req, res) => {
 app.get("/api/Service_Products/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
-    const seller = await Seller.findById(sellerId);
-    if (!seller) {
-      return res.json({ success: false, message: "Seller not found" });
+
+    const updatedSeller=await Seller.findByIdAndUpdate(
+      sellerId,
+      {
+        $inc:{
+          views:1
+        }
+      },
+      {new:true}
+    )
+    if(!updatedSeller){
+      return res.json({
+        success:false,
+        message:"Seller Not Found"
+      })
     }
+
     const products = await Product.find({ seller: sellerId });
+
+    const sellerRoom = `Seller_${sellerId}`;
+    
+    // This sends the updated count to the Seller's dashboard immediately
+    io.to(sellerRoom).emit("viewUpdate", {
+      totalViews: updatedSeller.views,
+      timestamp: new Date()
+    });
     res.json({
       success: true,
-      seller,
+      seller:updatedSeller,
       products
     })
   } catch (error) {
@@ -1645,11 +1721,30 @@ app.get("/api/Service_Products/:id", auth, async (req, res) => {
 app.get("/api/Asset_Products/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
-    const seller = await Seller.findById(sellerId);
-    if (!seller) {
-      return res.json({ success: false, message: "Seller not found" });
+   const updatedSeller = await Seller.findByIdAndUpdate(
+      sellerId,
+      {
+         $inc: { views: 1 } 
+        },
+      { new: true }
+    );
+
+    if (!updatedSeller) {
+      return res.status(404).json({ success: false, message: "Seller not found" });
     }
+
+    // 2. FETCH PRODUCTS
     const products = await Product.find({ seller: sellerId });
+
+    // 3. EMIT REAL-TIME UPDATE TO SELLER
+    const sellerRoom = `Seller_${sellerId}`;
+    
+    // This sends the updated count to the Seller's dashboard immediately
+    io.to(sellerRoom).emit("viewUpdate", {
+      totalViews: updatedSeller.views,
+      timestamp: new Date()
+    });
+
     res.json({
       success: true,
       seller,
@@ -2645,8 +2740,12 @@ app.post("/api/cart/add", auth, async (req, res) => {
     }
 
     const product = await Product.findById(productId);
-    if (!product || product.quantity < quantity) {
-      return res.json({ success: false, message: "Product unavailable or insufficient stock" });
+    if (!product) {
+      return res.json({ success: false, message: "Product unavailable" });
+    }
+
+    if(product.quantity < quantity){
+            return res.json({ success: false, message: "insufficient stock" });
     }
 
     let cart = await Cart.findOne({ buyer: buyerId });
@@ -2679,6 +2778,7 @@ app.post("/api/cart/add", auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Cart Error" });
   }
 });
+
 app.get("/api/cart", auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.userId).select("name phone profile");
@@ -3327,6 +3427,12 @@ app.get("/api/orders/:id", auth, async (req, res) => {
 
         const buyer = await Buyer.findById(req.userId);
 
+        if(!buyer){
+          return res.json({
+            success:false,
+            message:"Buyer not Found"
+          })
+        }
         res.json({ success: true, buyer });
 
       } catch (err) {
@@ -3346,7 +3452,7 @@ app.get("/api/orders/:id", auth, async (req, res) => {
 
     // POST: Create a new booking
     // Note: "paymentProof" here must match the key used in formData.append() on frontend
-    app.post("/api/bookService", auth, upload.single("paymentProof"), async (req, res) => {
+    app.post("/api/bookService", auth, upload.single("paymentProof",1), async (req, res) => {
       try {
 
         const { productId, name, phone, date, time, message, paymentMethod } = req.body;
@@ -3543,11 +3649,23 @@ app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req,
       updateData.password = await bcrypt.hash(req.body.password, 12);
     }
 
+    if(req.body.password!==req.body.confirmPassword){
+      return res.json({
+        success:false,
+        message:"Password Must Match"
+      })
+    }
     // profile image update
     const Max_Size=5*1024*1024;
     if (req.file) {
       if(req.file.size>Max_Size){
-  return res.json({success:false,message:"Profile is Large Max(5MB"})
+  return res.json({success:false,message:"Profile is Large Max(5MB)"})
+}
+if(!req.file.mimetype.startsWith("image/")){
+  return res.json({
+    success:false,
+    message:"Only Image Required"
+  })
 }
       updateData.profile = req.file.path;
     }
@@ -3559,7 +3677,10 @@ app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req,
     );
 
     if (!buyer) {
-      return res.json({ success: false });
+      return res.json({
+        success:false,
+        message:"Buyer Not Found"
+      })
     }
 
     res.json({ success: true, buyer });
@@ -3627,13 +3748,15 @@ app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req,
           // BOOKINGS
           await Booking.updateMany(
             { seller: sellerId, status: "Pending" },
-            { $set: { status: "Seen" } }
+            { $set: { status: "Seen" } },
+            {new:true}
           );
         } else {
           // ORDERS
           await Order.updateMany(
             { "items.seller": sellerId, status: "Pending" },
-            { $set: { seen: true } }
+            { $set: { seen: true } },
+            {new:true}
           );
         }
 
@@ -3644,6 +3767,7 @@ app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req,
         res.status(500).json({ success: false });
       }
     });
+
     app.post("/api/seller/view/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
@@ -3709,7 +3833,7 @@ app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req,
 app.put("/api/products/update/:productId", auth, upload.array("files", 10), async (req, res) => {
   try {
     const productId = req.params.productId;
-    const { name, price, location, category, description, quantity, type } = req.body;
+    const { name, price, description, quantity} = req.body;
 
     // 1. Find product and check ownership
     const product = await Product.findById(productId);
@@ -3725,11 +3849,8 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
     let updatedData = {
       name,
       price,
-      location,
-      category,
       description,
-      quantity,
-      type
+      quantity
     };
 
     // 3. Handle New Images (If any are uploaded)
