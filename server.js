@@ -380,10 +380,12 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     }
     
       if(user.lockUntil&&user.lockUntil>Date.now()){
-      const remaining=Math.ceil((user.lockUntil-Date.now())/1000);
+      const remaining=Math.floor(user.lockUntil-Date.now());
+      const minutes=Math.floor(remaining/(1000*60));
+      const seconds=Math.floor((remaining%(1000*60))/1000);
       return res.json({
         success:false,
-        message:`Account Locked For ${remaining}s`,
+        message:`Account Locked For ${minutes}m ${seconds}s`,
         remaining
       })
     }
