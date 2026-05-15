@@ -31,7 +31,6 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : [
       "https://isongamarket.com",
       "https://www.isongamarket.com",
-      "http://localhost:5174",
       "http://localhost:5173",
     ];
 app.use(cors({
@@ -90,7 +89,7 @@ const emailLimiter = rateLimit({
   max: 10, // strict for login
   message: {
     success: false,
-    message: "Too many login attempts for this account"
+    message: "Too many login attempts for this account try again later"
   },
  keyGenerator: (req) => {
   if (!req.body?.email){
@@ -140,7 +139,7 @@ app.post("/api/register", upload.fields([
 if(!name||!location||!phone||!email||!password||!description||!category||!sellerType||!repeat_pass){
   res.json({
     success:false,
-    message:"All Field Required"
+    message:"All Field Required please"
   })
   return
 }
@@ -181,7 +180,7 @@ if (!req.files || !req.files.files || req.files.files.length < 2) {
 if(req.files.files.length>6){
   return res.json({
     success:false,
-   message: "You can upload a maximum of 6 files"
+   message: "You can upload a maximum of 6 files only"
   })
 }
 for (let file of req.files.files) {
@@ -203,7 +202,7 @@ for(let file of req.files.files){
 const files = req.files.files.map(f => f.path);
  const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
      if(!rule.test(password)){
-      return res.json({success:false,message:"Weak Password"})
+      return res.json({success:false,message:"Please use strong password"})
      }
 
      if(password!==repeat_pass){
@@ -442,382 +441,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     res.status(500).json({ success: false, message: "Login Error" });
   }
 })
-/* ====================================================== */
-/* ADMIN MIDDLEWARE */
-/* ====================================================== */
 
-const isAdmin = (req, res, next) => {
-
-  try {
-
-    // auth middleware should attach req.user
-
-    if (!req.user) {
-
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-
-    }
-
-    // safer role check
-
-    if (req.user.role !== "admin") {
-
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Admin only.",
-      });
-
-    }
-
-    next();
-
-  } catch (err) {
-
-    console.log("Admin middleware error:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-
-  }
-
-};
-
-/* ====================================================== */
-/* ADMIN DASHBOARD */
-/* ====================================================== */
-
-app.get(
-  "/api/admin/dashboard",
-  auth,
-  isAdmin,
-  async (req, res) => {
-
-    try {
-
-      const [
-        buyerCount,
-        sellerCount,
-        totalOrders,
-        totalProducts,
-      ] = await Promise.all([
-        Buyer.countDocuments(),
-        Seller.countDocuments(),
-        Order.countDocuments(),
-        Product.countDocuments(),
-      ]);
-
-      /* ---------------- TOTAL REVENUE ---------------- */
-
-      const revenueResult = await Order.aggregate([
-        {
-          $match: {
-            paymentStatus: "Paid",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: {
-              $sum: "$totalPrice",
-            },
-          },
-        },
-      ]);
-
-      const totalRevenue =
-        revenueResult.length > 0
-          ? revenueResult[0].totalRevenue
-          : 0;
-
-      res.status(200).json({
-        success: true,
-
-        totalUsers: buyerCount + sellerCount,
-
-        totalSellers: sellerCount,
-
-        totalOrders,
-
-        totalProducts,
-
-        totalRevenue,
-      });
-
-    } catch (err) {
-
-      console.log("Dashboard Error:", err);
-
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-
-    }
-
-  }
-);
-
-/* ====================================================== */
-/* GET USERS */
-/* ====================================================== */
-
-app.get(
-  "/api/admin/users",
-  auth,
-  isAdmin,
-  async (req, res) => {
-
-    try {
-
-      const limit = Number(req.query.limit) || 20;
-
-      /* ---------------- BUYERS ---------------- */
-
-      const buyers = await Buyer.find()
-        .select("-password")
-        .sort({ createdAt: -1 })
-        .limit(limit);
-
-      /* ---------------- SELLERS ---------------- */
-
-      const sellers = await Seller.find()
-        .select("-password")
-        .sort({ createdAt: -1 })
-        .limit(limit);
-
-      /* ---------------- ADD TYPE ---------------- */
-
-      const formattedBuyers = buyers.map((buyer) => ({
-        ...buyer._doc,
-        userType: "buyer",
-      }));
-
-      const formattedSellers = sellers.map((seller) => ({
-        ...seller._doc,
-        userType: "seller",
-      }));
-
-      /* ---------------- MERGE + SORT ---------------- */
-
-      const users = [
-        ...formattedBuyers,
-        ...formattedSellers,
-      ].sort(
-        (a, b) =>
-          new Date(b.createdAt) -
-          new Date(a.createdAt)
-      );
-
-      res.status(200).json({
-        success: true,
-        users,
-      });
-
-    } catch (err) {
-
-      console.log("Users Error:", err);
-
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-
-    }
-
-  }
-);
-
-/* ====================================================== */
-/* BLOCK / UNBLOCK USER */
-/* ====================================================== */
-
-app.put(
-  "/api/admin/block-user/:id",
-  auth,
-  isAdmin,
-  async (req, res) => {
-
-    try {
-
-      let user = await Buyer.findById(req.params.id);
-
-      let userModel = "Buyer";
-
-      // if not buyer, check seller
-
-      if (!user) {
-
-        user = await Seller.findById(req.params.id);
-
-        userModel = "Seller";
-
-      }
-
-      if (!user) {
-
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-
-      }
-
-      // toggle block status
-
-      user.isBlocked = !user.isBlocked;
-
-      await user.save();
-
-      res.status(200).json({
-        success: true,
-        message: user.isBlocked
-          ? `${userModel} blocked successfully`
-          : `${userModel} unblocked successfully`,
-        isBlocked: user.isBlocked,
-      });
-
-    } catch (err) {
-
-      console.log("Block Error:", err);
-
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-
-    }
-
-  }
-);
-
-/* ====================================================== */
-/* DELETE USER */
-/* ====================================================== */
-
-app.delete(
-  "/api/admin/delete-user/:id",
-  auth,
-  isAdmin,
-  async (req, res) => {
-
-    try {
-
-      let deletedUser =
-        await Buyer.findByIdAndDelete(req.params.id);
-
-      // if not buyer, delete seller
-
-      if (!deletedUser) {
-
-        deletedUser =
-          await Seller.findByIdAndDelete(req.params.id);
-
-      }
-
-      if (!deletedUser) {
-
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-
-      }
-
-      res.status(200).json({
-        success: true,
-        message: "User deleted successfully",
-      });
-
-    } catch (err) {
-
-      console.log("Delete Error:", err);
-
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-
-    }
-
-  }
-);
-
-/* ====================================================== */
-/* GET SELLERS */
-/* ====================================================== */
-
-app.get(
-  "/api/admin/sellers",
-  auth,
-  isAdmin,
-  async (req, res) => {
-
-    try {
-
-      const sellers = await Seller.find()
-        .select("-password")
-        .sort({ createdAt: -1 });
-
-      res.status(200).json({
-        success: true,
-        sellers,
-      });
-
-    } catch (err) {
-
-      console.log("Seller Error:", err);
-
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-
-    }
-
-  }
-);
-
-/* ====================================================== */
-/* GET RECENT ORDERS */
-/* ====================================================== */
-
-app.get(
-  "/api/admin/orders",
-  auth,
-  isAdmin,
-  async (req, res) => {
-
-    try {
-
-      const limit = Number(req.query.limit) || 10;
-
-      const orders = await Order.find()
-        .sort({ createdAt: -1 })
-        .limit(limit);
-
-      res.status(200).json({
-        success: true,
-        orders,
-      });
-
-    } catch (err) {
-
-      console.log("Orders Error:", err);
-
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-
-    }
-
-  }
-);
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
     const { name, email, password,repeat_pass} = req.body;
@@ -837,16 +461,25 @@ if(!emailRegex.test(email)){
       return res.json({success:false,message:"Profile Image Required"});
     }
     const maxSize = 5 * 1024 * 1024;
+    let profileImage=req.file.profile[0];
 
-    if (req.file.size > maxSize) {
+    if (profileImage.size > maxSize) {
       return res.json({
         success: false,
         message: "Maximum file size is 5MB"
       });
     }
+
+    if(!profileImage.mimetype.startsWith("image/")){
+      return res.json({
+        success:false,
+        message:"Only Image required"
+      })
+    }
+    profile=profileImage.path;
      const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
      if(!rule.test(password)){
-      return res.json({success:false,messa:"Weak Password"})
+      return res.json({success:false,messa:"Please use strong password"})
      }
 
      if(password!==repeat_pass){
@@ -855,7 +488,7 @@ if(!emailRegex.test(email)){
      
     // ... Keep your password regex and hashing logic here ...
     const hashed = await bcrypt.hash(password, 12);
-    let profile = req.file ? req.file.path : "";
+
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
     // SEND EMAIL USING API (NOT SMTP)
@@ -1115,7 +748,7 @@ app.post("/api/forgot-password", async (req, res) => {
     await resend.emails.send({
       from: "Isonga Market <noreply@isongamarket.com>",
       to: email,
-      subject: "Buyer Password Reset",
+      subject: "Isonga Buyer Password Reset",
       html: verifyEmailTemplate(name, resetCode),
     });
 
@@ -1308,9 +941,6 @@ app.get("/api/dashboard", auth, async (req, res) => {
         ? totalRating/numReviews
         : 0;
 
-    // -----------------------------
-    // 3. Activity (ORDERS / BOOKINGS)
-    // -----------------------------
     let totalActivityCount = 0;
     let newActivityCount = 0;
 
@@ -1393,6 +1023,13 @@ app.get("/api/my_store", auth, async (req, res) => {
     const products = await Product.find({ seller: sellerId });
     const seller = await Seller.findById(sellerId).select("name");
 
+    if(!seller){
+      return res.json({
+        success:false,
+        message:"Seller not found!"
+      })
+    }
+
     res.json({
       success: true,
       products,
@@ -1471,8 +1108,24 @@ app.post("/api/seller/verify-reset-code", async (req, res) => {
   }
   const seller = await Seller.findOne({ email, verificationCode: code });
 
-  if (!seller || seller.verificationExpires < Date.now()) {
-    return res.json({ success: false, message: "Invalid or expired seller code" });
+  const Code=String(code).trim();
+
+  if(Code!==verificationCode){
+    return res.json({
+      success:false,
+      message:"Invalid code!"
+    })
+  }
+
+  if(!seller){
+    return res.json({
+      success:false,
+      message:"Seller not found!"
+    })
+  }
+
+  if (seller.verificationExpires < Date.now()) {
+    return res.json({ success: false, message: "code expired" });
   }
   res.json({ success: true });
 });
@@ -1487,7 +1140,7 @@ app.post("/api/seller/reset-password", async (req, res) => {
 
     const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
      if(!rule.test(newPassword)){
-      return res.json({success:false,messa:"Weak Password"})
+      return res.json({success:false,messa:"Please use strong password"})
      }
      if(!newPassword){
       return res.json({success:false,message:"New Password Required!"})
@@ -1564,12 +1217,19 @@ app.get("/api/buyer_dashboard", auth, async (req, res) => {
       "name location category profile files description"
     );
 
+    if(!sellers){
+      return res.json({
+        success:false,
+        message:"Sellers not found!"
+      })
+    }
     const sellersWithRatings = await Promise.all(
       sellers.map(async (seller) => {
         // Ensure 'Rating' model is imported at the top of your file!
         const ratings = await Rating.find({ seller: seller._id });
 
         const numReviews = ratings.length;
+
         const averageRating = numReviews
           ? ratings.reduce((sum, r) => sum + r.rating, 0) / numReviews
           : 0;
@@ -1724,7 +1384,9 @@ app.get("/api/Asset_Products/:id", auth, async (req, res) => {
    const updatedSeller = await Seller.findByIdAndUpdate(
       sellerId,
       {
-         $inc: { views: 1 } 
+         $inc: {
+           views: 1 
+          } 
         },
       { new: true }
     );
@@ -1773,10 +1435,10 @@ app.get("/api/sellers/:category", auth, async (req, res) => {
     const sellersWithRatings = await Promise.all(
       sellers.map(async (seller) => {
         const ratings = await Rating.find({ seller: seller._id });
+         const numReviews = ratings.length;
         const averageRating = ratings.length
           ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
           : 0;
-        const numReviews = ratings.length;
 
         return {
           ...seller.toObject(),
@@ -1825,6 +1487,12 @@ app.get("/api/buyer_profile/update", auth, async (req, res) => {
   try {
 
     const buyer = await Buyer.findById(req.userId);
+    if(!buyer){
+      return res.json({
+        success:false,
+        message:"Buyer not found!"
+      })
+    }
     res.json({
       success: true,
       buyer
@@ -1879,6 +1547,13 @@ if (!regex.test(req.body.phone)) {
           ...(seller.files || []),
           ...newImages
         ];
+      }
+
+      if(req.files["files"].length>10){
+        return res.json({
+          success:false,
+          message:"Max Uploads 10 files"
+        })
       }
       // =============================
       //  SAVE UPDATE
@@ -1968,7 +1643,9 @@ app.delete("/api/delete_location_image/:public_id", auth, async (req, res) => {
     await Seller.findByIdAndUpdate(
       req.userId,
       {
-        $pull: { files: public_id }
+        $pull: {
+           files: public_id 
+          }
       }
     );
 
@@ -3011,13 +2688,11 @@ app.get("/api/seller/orders", auth, async (req, res) => {
 
         if (sellerItems.length === 0) return null;
 
-        // ✅ Calculate seller total
         const sellerTotalPrice = sellerItems.reduce(
           (sum, item) => sum + item.price * item.quantity,
           0
         );
 
-        // ✅ Extract payment proof safely
         const proof =
           order.paymentProofsBySeller instanceof Map
             ? order.paymentProofsBySeller.get(sellerId)
@@ -3034,7 +2709,6 @@ app.get("/api/seller/orders", auth, async (req, res) => {
           totalPrice: sellerTotalPrice,
           createdAt: order.createdAt,
 
-          // 🔥 FINAL FIELD USED BY FRONTEND
           paymentProof: proof || null,
 
           items: sellerItems.map(item => ({
