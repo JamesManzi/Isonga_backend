@@ -380,7 +380,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     }
     
       if(user.lockUntil&&user.lockUntil>Date.now()){
-      const remaining=Math.floor(user.lockUntil-Date.now());
+      const remaining=Math.floor((user.lockUntil-Date.now())/1000);
       const minutes=Math.floor(remaining/60);
       const seconds=remaining%60;
       return res.json({
@@ -646,9 +646,11 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
     }
     if(user.lockUntil&&user.lockUntil>Date.now()){
       const remaining=Math.ceil((user.lockUntil-Date.now())/1000);
+      const minutes=Math.floor(remaining/60);
+      const seconds=remaining%60;
       return res.json({
         success:false,
-        message:`Account Locked for ${remaining}s`,
+        message:`Account Locked for ${minutes}m ${seconds}s`,
         remaining
       })
     }
