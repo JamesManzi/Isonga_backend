@@ -393,7 +393,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     if (!match) {
       user.failedAttempts+=1;
        const maxAttempts=7;
-       const lockDuration=15*60*1000
+       const lockDuration=5*60*1000
        let attemptsLeft=maxAttempts-user.failedAttempts;
       if(user.failedAttempts>=maxAttempts){
         user.lockUntil=Date.now()+lockDuration;
