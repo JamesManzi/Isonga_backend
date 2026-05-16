@@ -1108,36 +1108,47 @@ app.post("/api/seller/forgot-password", async (req, res) => {
     });
   }
 });
-
 app.post("/api/seller/verify-reset-code", async (req, res) => {
-  const { email, code } = req.body;
-  if(!code){
-    return res.json({success:true,message:"Code Required Please!"})
-  }
-  const seller = await Seller.findOne({ email, verificationCode: code });
+  try {
+    const { email, code } = req.body;
 
-  const Code=String(code).trim();
+    if (!code) {
+      return res.json({
+        success: false,
+        message: "Code Required"
+      });
+    }
 
-  if(Code!==verificationCode){
-    return res.json({
-      success:false,
-      message:"Invalid code!"
-    })
-  }
+    const seller = await Seller.findOne({
+      email,
+      verificationCode: String(code).trim()
+    });
 
-  if(!seller){
-    return res.json({
-      success:false,
-      message:"Seller not found!"
-    })
-  }
+    if (!seller) {
+      return res.json({
+        success: false,
+        message: "Invalid code"
+      });
+    }
 
-  if (seller.verificationExpires < Date.now()) {
-    return res.json({ success: false, message: "code expired" });
+    if (seller.verificationExpires < Date.now()) {
+      return res.json({
+        success: false,
+        message: "Code expired"
+      });
+    }
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
-  res.json({ success: true });
 });
-
 app.post("/api/seller/reset-password", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
