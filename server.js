@@ -3402,6 +3402,12 @@ res.json({ success: true, booking: updatedBooking });
         updateData.password = await bcrypt.hash(req.body.password, 12);
       }
 
+      if(!req.body.name||!req.body.password||!req.body.confirmPassword){
+        return res.json({
+          success:false,
+          message:"All fields required"
+        })
+      }
       // =========================
       // PROFILE IMAGE UPDATE
       // =========================
