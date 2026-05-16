@@ -3633,9 +3633,18 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
       quantity
     };
 
+    
     // 3. Handle New Images (If any are uploaded)
     if (req.files && req.files.length > 0) {
-
+      const Max_Size=20*1024*1024;
+      for(const file of files){
+        if(file.size>Max_Size){
+          return res.json({
+            success:false,
+            message:`File ${file.originalname} is too large. Max 20MB per file.`
+          })
+        }
+      }
       for(const file of req.files){
         if(!file.mimetype.startsWith("image/")&&!file.mimetype.startsWith("video/")){
           return res.json({
