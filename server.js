@@ -783,12 +783,8 @@ app.post("/api/reset-password", async (req, res) => {
     // 1. Find user first (to validate)
     const user = await Buyer.findOne({ email });
 
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
-    }
-
-    if (user.verificationCode !== inputCode) {
-      return res.json({ success: false, message: "Invalid code" });
+    if (user.verificationCode !== inputCode||!user) {
+      return res.json({ success: false, message: "Invalid code or User not found" });
     }
 
     if (user.verificationExpires < Date.now()) {
@@ -1064,7 +1060,7 @@ app.post("/api/seller/forgot-password", async (req, res) => {
       });
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if(!emailRegex.test(password)){
+    if(!emailRegex.test(email)){
       return res.json({success:false,message:"Invalid Email Try Again"});
     }
 
