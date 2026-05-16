@@ -3637,7 +3637,7 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
     // 3. Handle New Images (If any are uploaded)
     if (req.files && req.files.length > 0) {
       const Max_Size=20*1024*1024;
-      for(const file of files){
+      for(const file of req.files){
         if(file.size>Max_Size){
           return res.json({
             success:false,
