@@ -125,8 +125,6 @@ const auth = (req, res, next) => {
 mongoose.connect(process.env.MONGO_URL)
   .then(async () => {
     console.log(" Database Connected");
-    const collections = await mongoose.connection.db.listCollections().toArray();
-    console.log("Collections in DB:", collections.map(c => c.name));
   })
   .catch((error) => console.log(" DB connection error:", error));
 // Seller Register with Email Verification
@@ -392,7 +390,7 @@ app.post("/api/login", emailLimiter, async (req, res) => {
       const match = await bcrypt.compare(password, user.password);
     if (!match) {
       user.failedAttempts+=1;
-       const maxAttempts=7;
+       const maxAttempts=5;
        const lockDuration=5*60*1000
        let attemptsLeft=maxAttempts-user.failedAttempts;
       if(user.failedAttempts>=maxAttempts){
@@ -421,7 +419,10 @@ app.post("/api/login", emailLimiter, async (req, res) => {
     }
     //  CREATE TOKEN
     const token = jwt.sign(
-      { id: user._id, role:user.role},
+      { 
+        id: user._id,
+         role:user.role
+        },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -463,7 +464,7 @@ if(!emailRegex.test(email)){
       return res.json({success:false,message:"Profile Image Required"});
     }
     const maxSize = 5 * 1024 * 1024;
-    let profileImage=req.file.profile[0];
+    const profileImage=req.file.profile[0];
 
     if (profileImage.size > maxSize) {
       return res.json({
@@ -478,7 +479,7 @@ if(!emailRegex.test(email)){
         message:"Only Image required"
       })
     }
-    profile=profileImage.path;
+   const profile=profileImage.path;
      const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
      if(!rule.test(password)){
       return res.json({success:false,messa:"Please use strong password"})
@@ -656,7 +657,7 @@ app.post("/api/buyer_login", emailLimiter, async (req, res) => {
     }
       const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      const maxAttempts=7;
+      const maxAttempts=5;
       const lockDuration=5*60*1000;
       let attemptsLeft=maxAttempts-user.failedAttempts;
       user.failedAttempts+=1;
@@ -1027,6 +1028,13 @@ app.get("/api/my_store", auth, async (req, res) => {
     const products = await Product.find({ seller: sellerId });
     const seller = await Seller.findById(sellerId).select("name");
 
+    if(!products){
+      return res.json({
+        success:false,
+        messsage:"Products Not Found!"
+      })
+    }
+
     if(!seller){
       return res.json({
         success:false,
@@ -1280,11 +1288,11 @@ app.get("/api/view_profile/:id", auth, async (req, res) => {
     const ratings = await Rating.find({ seller: sellerId })
       .populate("buyer", "name profile");
 
-    const averageRating = ratings.length
+     const numReviews = ratings.length;
+
+    const averageRating = numReviews>0
       ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
       : 0;
-
-    const numReviews = ratings.length;
 
     res.json({
       success: true,
@@ -1320,6 +1328,13 @@ app.get("/api/view_products/:id", auth, async (req, res) => {
 
     // 2. FETCH PRODUCTS
     const products = await Product.find({ seller: sellerId });
+
+    if(!products){
+      return res.json({
+        success:false,
+        message:"Products not found!"
+      })
+    }
 
     // 3. EMIT REAL-TIME UPDATE TO SELLER
     const sellerRoom = `Seller_${sellerId}`;
@@ -1364,6 +1379,12 @@ app.get("/api/Service_Products/:id", auth, async (req, res) => {
 
     const products = await Product.find({ seller: sellerId });
 
+    if(!products){
+      return res.json({
+        success:false,
+        message:"Products not found !"
+      })
+    }
     const sellerRoom = `Seller_${sellerId}`;
     
     // This sends the updated count to the Seller's dashboard immediately
@@ -1402,6 +1423,12 @@ app.get("/api/Asset_Products/:id", auth, async (req, res) => {
     // 2. FETCH PRODUCTS
     const products = await Product.find({ seller: sellerId });
 
+    if(!products){
+      return res.json({
+        success:false,
+        message:"Products not found!"
+      })
+    }
     // 3. EMIT REAL-TIME UPDATE TO SELLER
     const sellerRoom = `Seller_${sellerId}`;
     
@@ -1433,6 +1460,13 @@ app.get("/api/sellers/:category", auth, async (req, res) => {
     let buyer = null;
     if (req.userId) {
       buyer = await Buyer.findById(req.userId).select("name profile");
+    }
+
+    if(!req.userId){
+      return res.json({
+        success:false,
+        message:"Buyer not found !"
+      })
     }
 
     // Attach ratings to each seller
@@ -1538,14 +1572,35 @@ if (!regex.test(req.body.phone)) {
       //  UPDATE PROFILE IMAGE
       // =============================
       if (req.files && req.files["profileImage"]) {
-        updatedData.profile = req.files["profileImage"][0].path; //  FIXED
+        const profileFile=req.files["profileImage"][0];
+         if(!profileFile.mimetype.startsWith("image/")){
+        return res.json({
+          success:false,
+          message:"Only Image required!"
+        })
       }
-
+      updatedData.profile =profileFile.path; //  FIXED
+      }
       // =============================
       //  ADD LOCATION IMAGES
       // =============================
       if (req.files && req.files["files"]) {
         const newImages = req.files["files"].map(file => file.path); //  FIXED
+        
+      for(const file of req.files["files"]){
+        if(!file.mimetype.startsWith("image/")){
+        return res.json({
+          success:false,
+          message:"Only Images required"
+        })
+      }
+      }
+       if(req.files["files"].length>10){
+        return res.json({
+          success:false,
+          message:"Max Uploads 10 files"
+        })
+      }
 
         updatedData.files = [
           ...(seller.files || []),
@@ -1553,12 +1608,6 @@ if (!regex.test(req.body.phone)) {
         ];
       }
 
-      if(req.files["files"].length>10){
-        return res.json({
-          success:false,
-          message:"Max Uploads 10 files"
-        })
-      }
       // =============================
       //  SAVE UPDATE
       // =============================
@@ -2342,7 +2391,12 @@ app.get("/api/home_sellers", async (req, res) => {
     const sellers = await Seller.find().select(
       "name location category profile files description"
     );
-
+    if(!sellers){
+      return res.json({
+        success:false,
+        message:"Sellers not found"
+      })
+    }
     // Add ratings info for each seller
     const sellersWithRatings = await Promise.all(
       sellers.map(async (seller) => {
@@ -2463,6 +2517,13 @@ app.post("/api/cart/add", auth, async (req, res) => {
 app.get("/api/cart", auth, async (req, res) => {
   try {
     const buyer = await Buyer.findById(req.userId).select("name phone profile");
+
+    if(!buyer){
+      return res.json({
+        success:false,
+        message:"Buyer not found"
+      })
+    }
 
     const cart = await Cart.findOne({ buyer: req.userId })
       .populate({
@@ -3314,66 +3375,91 @@ res.json({ success: true, booking: updatedBooking });
         });
       }
     });
-app.put("/api/update_buyer_profile", auth, upload.single("profile"), async (req, res) => {
-  try {
-    const buyerId = req.userId;
+    
+    app.put(
+  "/api/update_buyer_profile",
+  auth,
+  upload.single("profile"),
+  async (req, res) => {
+    try {
+      const buyerId = req.userId;
 
-    let updateData = {
-      name: req.body.name
-    };
+      let updateData = {
+        name: req.body.name
+      };
 
-    // password update
-    if (req.body.password) {
-      updateData.password = await bcrypt.hash(req.body.password, 12);
+      // =========================
+      // PASSWORD VALIDATION FIRST
+      // =========================
+      if (req.body.password || req.body.confirmPassword) {
+        if (req.body.password !== req.body.confirmPassword) {
+          return res.json({
+            success: false,
+            message: "Passwords must match"
+          });
+        }
+
+        updateData.password = await bcrypt.hash(req.body.password, 12);
+      }
+
+      // =========================
+      // PROFILE IMAGE UPDATE
+      // =========================
+      if (req.file) {
+        const Max_Size = 5 * 1024 * 1024;
+
+        if (req.file.size > Max_Size) {
+          return res.json({
+            success: false,
+            message: "Profile image too large (Max 5MB)"
+          });
+        }
+
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.json({
+            success: false,
+            message: "Only images allowed"
+          });
+        }
+
+        updateData.profile = req.file.path;
+      }
+
+      // =========================
+      // UPDATE BUYER
+      // =========================
+      const buyer = await Buyer.findOneAndUpdate(
+        { _id: buyerId },
+        updateData,
+        { new: true }
+      );
+
+      if (!buyer) {
+        return res.json({
+          success: false,
+          message: "Buyer Not Found"
+        });
+      }
+
+      res.json({ success: true, buyer });
+
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: "Server error" });
     }
-
-    if(req.body.password!==req.body.confirmPassword){
-      return res.json({
-        success:false,
-        message:"Password Must Match"
-      })
-    }
-    // profile image update
-    const Max_Size=5*1024*1024;
-    if (req.file) {
-      if(req.file.size>Max_Size){
-  return res.json({success:false,message:"Profile is Large Max(5MB)"})
-}
-if(!req.file.mimetype.startsWith("image/")){
-  return res.json({
-    success:false,
-    message:"Only Image Required"
-  })
-}
-      updateData.profile = req.file.path;
-    }
-
-    const buyer = await Buyer.findOneAndUpdate(
-      { _id: buyerId }, 
-      updateData,       
-      { new: true }     
-    );
-
-    if (!buyer) {
-      return res.json({
-        success:false,
-        message:"Buyer Not Found"
-      })
-    }
-
-    res.json({ success: true, buyer });
-
-  } catch (err) {
-    console.log(err);
-    res.json({ success: false });
   }
-});
+);
     app.delete("/api/cart/remove/:id", auth, async (req, res) => {
       try {
         const buyerId = req.userId;
 
         const identifier = req.params.id;
-
+        if(!identifier){
+          return res.json({
+            success:false,
+            message:"Product not found"
+          })
+        }
         const cart = await Cart.findOne({ buyer: buyerId });
         if (!cart) {
           return res.status(404).json({ success: false, message: "Cart not found" });
@@ -3419,7 +3505,10 @@ if(!req.file.mimetype.startsWith("image/")){
         const seller = await Seller.findById(sellerId);
 
         if (!seller) {
-          return res.json({ success: false });
+          return res.json({
+             success: false,
+             message:"Seller not found"
+             });
         }
 
         if (seller.sellerType === "Service") {
@@ -3533,6 +3622,15 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
 
     // 3. Handle New Images (If any are uploaded)
     if (req.files && req.files.length > 0) {
+
+      for(const file of req.files){
+        if(!file.mimetype.startsWith("image/")&&!file.mimetype.startsWith("video/")){
+          return res.json({
+            success:false,
+            message:"Only Images and video Allowed"
+          })
+        }
+      }
       const newFiles = req.files.map(file => file.path);
       // Option: Replace old images or append them. 
       // Most users expect to keep old ones + add new ones:
