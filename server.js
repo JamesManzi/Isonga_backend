@@ -464,7 +464,7 @@ if(!emailRegex.test(email)){
       return res.json({success:false,message:"Profile Image Required"});
     }
     const maxSize = 5 * 1024 * 1024;
-    const profileImage=req.file.profile[0];
+    const profileImage=req.file;
 
     if (profileImage.size > maxSize) {
       return res.json({
