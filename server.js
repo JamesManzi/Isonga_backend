@@ -3692,13 +3692,6 @@ app.get("/api/admin/dashboard", auth, async (req, res) => {
     const totalOrders = await Order.countDocuments();
     const totalMessages = await Message.countDocuments();
 
-    // ---------------- REVENUE ----------------
-    const orders = await Order.find({ paid: true });
-
-    const totalRevenue = orders.reduce((sum, order) => {
-      return sum + (order.totalPrice || 0);
-    }, 0);
-
     res.json({
       success: true,
       totalUsers,
