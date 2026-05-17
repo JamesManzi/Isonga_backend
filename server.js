@@ -3512,7 +3512,10 @@ res.json({ success: true, booking: updatedBooking });
         const sellerId = req.userId;
 
         if (!sellerId) {
-          return res.status(401).json({ success: false });
+          return res.status(401).json({
+             success: false,
+             message:"Sellers not found"
+             });
         }
 
         const seller = await Seller.findById(sellerId);
@@ -3559,7 +3562,10 @@ res.json({ success: true, booking: updatedBooking });
     today.setHours(0, 0, 0, 0);
 
     const seller = await Seller.findById(sellerId);
-    if (!seller) return res.json({ success: false });
+    if (!seller) return res.json({ 
+      success: false,
+      message:"Seller not found"
+     });
 
     // 1. Logic to find/update today's entry
     let todayEntry = seller.dailyViews.find(
@@ -3678,8 +3684,22 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
   }
 });
 
-    // START SERVER
-    // ==============================
+app.get("/api/admin/dashboard",auth,async(req,res)=>{
+  try {
+    const totalSellers=await Seller.countDocuments();
+    const totalProducts=await Product.countDocuments();
+     const totalOrders=await Order.countDocuments();
+
+     res.json({
+      success:true,
+      totalSellers,
+      totalProducts,
+      totalOrders
+     })
+  } catch (error) {
+    console.log("Loading Data error")
+  }
+})
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
