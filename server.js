@@ -3764,6 +3764,103 @@ app.get("/api/admin/orders", auth, isAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/dashboard-sellers
+app.get("/api/admin/dashboard-sellers", auth, isAdmin, async (req, res) => {
+  try {
+    const sellers = await Seller.find({})
+      .sort({ createdAt: -1 })
+      .select("name email category location description files profile isVerified isSuspended averageRating numReviews")
+      .lean();
+
+    res.json({
+      success: true,
+      sellers: sellers
+    });
+  } catch (error) {
+    console.error("Admin Fetch Sellers Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+// PUT /api/admin/sellers/:id/verify
+app.put("/api/admin/sellers/:id/verify", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { verify } = req.body;
+
+    const updatedSeller = await Seller.findByIdAndUpdate(
+      id,
+      { $set: { isVerified: verify } },
+      { new: true }
+    );
+
+    if (!updatedSeller) {
+      return res.status(404).json({ success: false, message: "Seller records not found" });
+    }
+
+    res.json({
+      success: true,
+      seller: updatedSeller
+    });
+  } catch (error) {
+    console.error("Verification Parameter Error:", error);
+    res.status(500).json({ success: false, message: "Failed to alter seller verification parameters" });
+  }
+});
+
+// PUT /api/admin/sellers/:id/suspend
+app.put("/api/admin/sellers/:id/suspend", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { suspend } = req.body;
+
+    const updatedSeller = await Seller.findByIdAndUpdate(
+      id,
+      { $set: { isSuspended: suspend } },
+      { new: true }
+    );
+
+    if (!updatedSeller) {
+      return res.status(404).json({ success: false, message: "Seller records not found" });
+    }
+
+    res.json({
+      success: true,
+      seller: updatedSeller
+    });
+  } catch (error) {
+    console.error("Suspension Clearances Error:", error);
+    res.status(500).json({ success: false, message: "Failed to modify account operational clearance status" });
+  }
+});
+
+// DELETE /api/admin/sellers/:id
+app.delete("/api/admin/sellers/:id", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const sellerToDelete = await Seller.findById(id);
+    if (!sellerToDelete) {
+      return res.status(404).json({ success: false, message: "Seller profile data was not found" });
+    }
+
+    // Cascade delete products tied to this specific vendor account 
+    if (typeof Product !== "undefined") {
+      await Product.deleteMany({ sellerId: id });
+    }
+
+    await Seller.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: "Store records permanently purged from system successfully"
+    });
+  } catch (error) {
+    console.error("System Purge Drop Failure:", error);
+    res.status(500).json({ success: false, message: "Purge operation dropped due to backend response failure" });
+  }
+});
+
 // POST /api/logout
 app.post("/api/logout", (req, res) => {
   res.json({ success: true, message: "Logged out successfully" });
