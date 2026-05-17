@@ -3609,7 +3609,7 @@ res.json({ success: true, booking: updatedBooking });
       });
     });
 
-    // --- UPDATE PRODUCT ROUTE ---
+// --- UPDATE PRODUCT ROUTE ---
 app.put("/api/products/update/:productId", auth, upload.array("files", 10), async (req, res) => {
   try {
     const productId = req.params.productId;
