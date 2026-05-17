@@ -3683,6 +3683,13 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
     res.status(500).json({ success: false, message: "Server Error during update" });
   }
 });
+
+const isAdmin = (req, res, next) => {
+  if (req.role !== "admin") {
+    return res.status(403).json({ success: false, message: "Access denied. Admins only." });
+  }
+  next();
+};
 // GET /api/admin/dashboard
 app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
   try {
@@ -3756,12 +3763,6 @@ app.get("/api/admin/orders", auth, isAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-const isAdmin = (req, res, next) => {
-  if (req.role !== "admin") {
-    return res.status(403).json({ success: false, message: "Access denied. Admins only." });
-  }
-  next();
-};
 
 // POST /api/logout
 app.post("/api/logout", (req, res) => {
