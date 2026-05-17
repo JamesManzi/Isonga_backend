@@ -3683,23 +3683,38 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
     res.status(500).json({ success: false, message: "Server Error during update" });
   }
 });
-
-app.get("/api/admin/dashboard",auth,async(req,res)=>{
+app.get("/api/admin/dashboard", auth, async (req, res) => {
   try {
-    const totalSellers=await Seller.countDocuments();
-    const totalProducts=await Product.countDocuments();
-     const totalOrders=await Order.countDocuments();
+    const totalUsers = await User.countDocuments();
+    const totalSellers = await Seller.countDocuments();
+    const totalProducts = await Product.countDocuments();
+    const totalOrders = await Order.countDocuments();
 
-     res.json({
-      success:true,
+    // OPTIONAL: revenue calculation (adjust based on your schema)
+    const revenueData = await Order.find({ paid: true });
+    const totalRevenue = revenueData.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
+
+    const totalMessages = await Message.countDocuments(); // if you have messages
+
+    res.json({
+      success: true,
+      totalUsers,
       totalSellers,
       totalProducts,
-      totalOrders
-     })
+      totalOrders,
+      totalRevenue,
+      totalMessages
+    });
+
   } catch (error) {
-    console.log("Loading Data error")
+    console.error("Loading Data error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load dashboard data"
+    });
   }
-})
+});
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
