@@ -3683,14 +3683,18 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
     res.status(500).json({ success: false, message: "Server Error during update" });
   }
 });
-app.get("/api/admin/dashboard", auth, async (req, res) => {
+// GET /api/admin/dashboard
+app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
   try {
-    // ---------------- COUNTS ----------------
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await Buyer.countDocuments();
     const totalSellers = await Seller.countDocuments();
     const totalProducts = await Product.countDocuments();
     const totalOrders = await Order.countDocuments();
     const totalMessages = await Message.countDocuments();
+
+    // Summing revenue from all orders
+    const orders = await Order.find();
+    const totalRevenue = orders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
 
     res.json({
       success: true,
@@ -3698,61 +3702,70 @@ app.get("/api/admin/dashboard", auth, async (req, res) => {
       totalSellers,
       totalProducts,
       totalOrders,
-      totalMessages,
       totalRevenue,
+      totalMessages
     });
-
   } catch (error) {
-    console.error("Dashboard Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to load dashboard data",
-    });
+    console.error("Admin Dashboard Stats Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-app.get("/api/admin/users", auth, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
 
-    const users = await User.find()
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .select("-password");
+// GET /api/admin/users?limit=5
+app.get("/api/admin/users", auth, isAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    
+    // Fetch recent buyers & sellers dynamically, mapping roles for dashboard layout compatibility
+    const [recentBuyers, recentSellers] = await Promise.all([
+      Buyer.find().sort({ createdAt: -1 }).limit(limit).lean(),
+      Seller.find().sort({ createdAt: -1 }).limit(limit).lean()
+    ]);
+
+    const combinedUsers = [
+      ...recentBuyers.map(u => ({ ...u, role: "buyer" })),
+      ...recentSellers.map(u => ({ ...u, role: u.sellerType || "seller" }))
+    ]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit);
 
     res.json({
       success: true,
-      users,
+      users: combinedUsers
     });
-
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch users",
-    });
+    console.error("Admin Fetch Users Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-app.get("/api/admin/orders", auth, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
 
-    const orders = await Order.find()
+// GET /api/admin/orders?limit=5
+app.get("/api/admin/orders", auth, isAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    const recentOrders = await Order.find()
       .sort({ createdAt: -1 })
       .limit(limit);
 
     res.json({
       success: true,
-      orders,
+      orders: recentOrders
     });
-
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch orders",
-    });
+    console.error("Admin Fetch Orders Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
+});
+const isAdmin = (req, res, next) => {
+  if (req.role !== "admin") {
+    return res.status(403).json({ success: false, message: "Access denied. Admins only." });
+  }
+  next();
+};
+
+// POST /api/logout
+app.post("/api/logout", (req, res) => {
+  res.json({ success: true, message: "Logged out successfully" });
 });
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
