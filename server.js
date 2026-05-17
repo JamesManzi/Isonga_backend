@@ -3685,16 +3685,19 @@ app.put("/api/products/update/:productId", auth, upload.array("files", 10), asyn
 });
 app.get("/api/admin/dashboard", auth, async (req, res) => {
   try {
+    // ---------------- COUNTS ----------------
     const totalUsers = await User.countDocuments();
     const totalSellers = await Seller.countDocuments();
     const totalProducts = await Product.countDocuments();
     const totalOrders = await Order.countDocuments();
+    const totalMessages = await Message.countDocuments();
 
-    // OPTIONAL: revenue calculation (adjust based on your schema)
-    const revenueData = await Order.find({ paid: true });
-    const totalRevenue = revenueData.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
+    // ---------------- REVENUE ----------------
+    const orders = await Order.find({ paid: true });
 
-    const totalMessages = await Message.countDocuments(); // if you have messages
+    const totalRevenue = orders.reduce((sum, order) => {
+      return sum + (order.totalPrice || 0);
+    }, 0);
 
     res.json({
       success: true,
@@ -3702,16 +3705,59 @@ app.get("/api/admin/dashboard", auth, async (req, res) => {
       totalSellers,
       totalProducts,
       totalOrders,
+      totalMessages,
       totalRevenue,
-      totalMessages
     });
 
   } catch (error) {
-    console.error("Loading Data error:", error);
+    console.error("Dashboard Error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to load dashboard data"
+      message: "Failed to load dashboard data",
+    });
+  }
+});
+app.get("/api/admin/users", auth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+
+    const users = await User.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select("-password");
+
+    res.json({
+      success: true,
+      users,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
+  }
+});
+app.get("/api/admin/orders", auth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+
+    const orders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    res.json({
+      success: true,
+      orders,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch orders",
     });
   }
 });
