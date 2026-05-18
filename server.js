@@ -4084,6 +4084,133 @@ app.put(
     }
   }
 );
+app.delete("/api/services/delete/:productId", auth, async (req, res) => {
+  try {
+    const productId = req.params.productId;
+    
+    // 1. Find service (using Service model instead of Product)
+    const service = await Service.findById(productId);
+
+    if (!service) {
+      return res.status(404).json({ success: false, message: "Service Not Found" });
+    }
+
+    // 2. Check if user is owner OR admin
+    const isOwner = service.seller.toString() === req.userId;
+    const isAdmin = req.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // 3. Perform delete
+    await Service.findByIdAndDelete(productId);
+
+    res.json({ success: true, message: "Service Deleted Successfully" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Delete Service Error" });
+  }
+});
+
+app.put(
+  "/api/services/update/:productId",
+  auth,
+  upload.array("files", 10),
+  async (req, res) => {
+    try {
+      const productId = req.params.productId;
+      // Added location here from your frontend form data
+      const { name, price, description, location } = req.body;
+
+      // 1. Find service
+      const service = await Service.findById(productId);
+
+      if (!service) {
+        return res.status(404).json({
+          success: false,
+          message: "Service Not Found",
+        });
+      }
+
+      // 2. Check if user is owner OR admin
+      const isOwner = service.seller.toString() === req.userId;
+      const isAdmin = req.role === "admin";
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      // 3. Prepare update object (includes location)
+      let updatedData = {
+        name,
+        price,
+        description,
+        location,
+      };
+
+      // 4. Handle uploaded files if any new media is provided
+      if (req.files && req.files.length > 0) {
+        const MAX_SIZE = 20 * 1024 * 1024;
+
+        // File size validation
+        for (const file of req.files) {
+          if (file.size > MAX_SIZE) {
+            return res.status(400).json({
+              success: false,
+              message: `File ${file.originalname} is too large. Max 20MB per file.`,
+            });
+          }
+        }
+
+        // File type validation
+        for (const file of req.files) {
+          if (
+            !file.mimetype.startsWith("image/") &&
+            !file.mimetype.startsWith("video/")
+          ) {
+            return res.status(400).json({
+              success: false,
+              message: "Only images and videos are allowed",
+            });
+          }
+        }
+
+        const newFiles = req.files.map((file) => file.path);
+
+        // Keep old files + add new ones
+        updatedData.files = [...service.files, ...newFiles];
+      }
+
+      // 5. Update service in database
+      const updatedService = await Service.findByIdAndUpdate(
+        productId,
+        { $set: updatedData },
+        { new: true }
+      );
+
+      res.json({
+        success: true,
+        message: "Service Updated Successfully",
+        product: updatedService, // Keeps property key name 'product' to natively support your frontend state assignment
+      });
+    } catch (error) {
+      console.error("Update Service Error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Server Error during update",
+      });
+    }
+  }
+);
+
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
