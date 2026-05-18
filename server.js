@@ -3708,11 +3708,16 @@ app.put(
     }
   }
 );
-
 const isAdmin = (req, res, next) => {
+  console.log("ROLE:", req.role);
+
   if (req.role !== "admin") {
-    return res.status(403).json({ success: false, message: "Access denied. Admins only." });
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Admins only.",
+    });
   }
+
   next();
 };
 // GET /api/admin/dashboard
