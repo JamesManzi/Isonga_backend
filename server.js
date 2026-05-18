@@ -2031,42 +2031,59 @@ socket.on("userOnline", (data) => {
       console.error("messagesRead Error:", err);
     }
   });
+const mongoose = require("mongoose"); // Ensure mongoose is imported at the top of your file
 
-  socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
-    try {
-      const message = await Message.findById(messageId);
-      if (!message) return;
+socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
+  try {
+    const message = await Message.findById(messageId);
+    if (!message) return;
 
-      const userId = socket.userId;
+    // Use fallback methods to grab user session data safely depending on how auth is wired
+    const userId = socket.userId || socket.user?._id || socket.handshake.auth?.userId;
+    if (!userId) {
+      console.error("Delete Error: Unauthorized or missing userId context on socket connection");
+      return;
+    }
 
-      if (forEveryone) {
-        // only sender can delete for everyone
-        if (message.sender.toString() !== userId) return;
+    if (forEveryone) {
+      // Security Check: Only the original sender can delete a message globally
+      if (message.sender.toString() !== userId.toString()) return;
 
-        await Message.findByIdAndUpdate(messageId, {
-          message: "This message was deleted",
-          files: [],
-          deletedForEveryone: true,
-        });
-      } else {
-        // delete for me only
-        await Message.findByIdAndUpdate(messageId, {
-          $addToSet: {
-            deletedFor: new mongoose.Types.ObjectId(userId),
-          },
-        });
-      }
+      await Message.findByIdAndUpdate(messageId, {
+        message: "This message was deleted",
+        files: [],
+        deletedForEveryone: true,
+      });
 
+      // Global Update: Broadcast to BOTH users in the channel room layout
       io.to(room).emit("messageDeleted", {
         messageId,
-        forEveryone,
+        room, // FIXED: Now passing room property to prevent front-end guard dropouts
+        forEveryone: true,
         userId,
       });
 
-    } catch (err) {
-      console.error("Delete Error:", err);
+    } else {
+      // Local Update: Register user into targeted hidden state arrays
+      await Message.findByIdAndUpdate(messageId, {
+        $addToSet: {
+          deletedFor: new mongoose.Types.ObjectId(userId),
+        },
+      });
+
+      // Target Event routing: Only notify the active user context who initiated the request
+      socket.emit("messageDeleted", {
+        messageId,
+        room, // FIXED: Now passing room property to prevent front-end guard dropouts
+        forEveryone: false,
+        userId,
+      });
     }
-  });
+
+  } catch (err) {
+    console.error("Delete Error:", err);
+  }
+});
 
   const mongoose = require("mongoose");
 
