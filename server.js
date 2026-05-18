@@ -3986,6 +3986,93 @@ app.get("/api/DeleteAssets/:id", auth, async (req, res) => {
   }
 });
 
+// DELETE PRODUCT (ADMIN ONLY)
+app.delete(
+  "/api/products/delete/:productId",
+  auth,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const productId = req.params.productId;
+
+      const product = await Product.findById(productId);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      await Product.findByIdAndDelete(productId);
+
+      res.json({
+        success: true,
+        message: "Product deleted successfully",
+      });
+    } catch (error) {
+      console.error("Delete Product Error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error while deleting product",
+      });
+    }
+  }
+);
+// UPDATE PRODUCT (ADMIN ONLY)
+app.put(
+  "/api/products/update/:productId",
+  auth,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const productId = req.params.productId;
+
+      const {
+        name,
+        price,
+        quantity,
+        description,
+      } = req.body;
+
+      const product = await Product.findById(productId);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      const updatedProduct = await Product.findByIdAndUpdate(
+        productId,
+        {
+          $set: {
+            name,
+            price,
+            quantity,
+            description,
+          },
+        },
+        { new: true }
+      );
+
+      res.json({
+        success: true,
+        message: "Product updated successfully",
+        product: updatedProduct,
+      });
+    } catch (error) {
+      console.error("Update Product Error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Server error while updating product",
+      });
+    }
+  }
+);
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
