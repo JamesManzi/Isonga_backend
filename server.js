@@ -3898,6 +3898,70 @@ app.get("/api/DeleteProducts/:id", auth, async (req, res) => {
   }
 });
 
+
+app.get("/api/DeleteServices/:id", auth, async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    const seller=await Seller.find(sellerId);
+
+    if (!seller) {
+      return res.status(404).json({ success: false, message: "Seller not found" });
+    }
+
+    // 2. FETCH PRODUCTS
+    const products = await Product.find({ seller: sellerId });
+
+    if(!products){
+      return res.json({
+        success:false,
+        message:"Products not found!"
+      })
+    }
+
+    res.json({
+      success: true,
+      seller,
+      products
+    });
+
+  } catch (error) {
+    console.error("View Products Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+
+app.get("/api/DeleteAssets/:id", auth, async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    const seller=await Seller.find(sellerId);
+
+    if (!seller) {
+      return res.status(404).json({ success: false, message: "Seller not found" });
+    }
+
+    // 2. FETCH PRODUCTS
+    const products = await Product.find({ seller: sellerId });
+
+    if(!products){
+      return res.json({
+        success:false,
+        message:"Products not found!"
+      })
+    }
+
+    res.json({
+      success: true,
+      seller,
+      products
+    });
+
+  } catch (error) {
+    console.error("View Products Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
