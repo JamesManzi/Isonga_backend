@@ -4087,7 +4087,7 @@ app.put(
 
 app.get("/api/admin/buyers", auth, isAdmin, async (req, res) => {
   try {
-    const buyers = await User.find({ role: "buyer" }).select("-password");
+    const buyers = await Buyer.find({ role: "buyer" }).select("-password");
 
     res.json({
       success: true,
@@ -4103,7 +4103,7 @@ app.get("/api/admin/buyers", auth, isAdmin, async (req, res) => {
 
 app.delete("/api/admin/buyer/:id", auth, isAdmin, async (req, res) => {
   try {
-    const buyer = await User.findById(req.params.id);
+    const buyer = await Buyer.findById(req.params.id);
 
     if (!buyer) {
       return res.status(404).json({
