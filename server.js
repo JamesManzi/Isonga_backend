@@ -3898,7 +3898,7 @@ app.get("/api/DeleteProducts/:id", auth, async (req, res) => {
   }
 });
 
-app.delete("/api/products/delete/:productId", auth, async (req, res) => {
+app.delete("/api/products/delete/:productId", auth,isAdmin, async (req, res) => {
   try {
     const { productId } = req.params;
 
@@ -3921,7 +3921,7 @@ app.delete("/api/products/delete/:productId", auth, async (req, res) => {
 // ==========================================
 // 3. UPDATE A SINGLE PRODUCT
 // ==========================================
-app.put("/api/products/update/:productId", auth, async (req, res) => {
+app.put("/api/products/update/:productId",isAdmin, auth, async (req, res) => {
   try {
     const { productId } = req.params;
     const { name, price, quantity, description } = req.body;
