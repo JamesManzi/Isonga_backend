@@ -4133,6 +4133,60 @@ app.delete("/api/admin/buyer/:id", auth, isAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/bookings", auth, isAdmin, async (req, res) => {
+  try {
+    const bookings = await Booking.find()
+      .populate("user", "name email phone")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      bookings,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to load bookings",
+    });
+  }
+});
+
+app.put(
+  "/api/admin/booking/status/:id",
+  auth,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const { status } = req.body;
+
+      const booking = await Booking.findById(req.params.id);
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found",
+        });
+      }
+
+      booking.status = status;
+      await booking.save();
+
+      res.json({
+        success: true,
+        message: "Booking updated",
+        booking,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
+  }
+);
+
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
