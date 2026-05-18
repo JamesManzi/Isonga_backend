@@ -1514,10 +1514,16 @@ app.delete("/api/products/delete/:productId", auth, async (req, res) => {
       return res.status(404).json({ success: false, message: "Product Not Found" });
     }
 
+        // 2. Check if user is owner OR admin
+const isOwner = product.seller.toString() === req.userId;
+const isAdmin = req.role === "admin";
 
-    if (product.seller.toString() !== req.userId) {
-      return res.status(403).json({ success: false, message: "You can only delete your own products" });
-    }
+if (!isOwner && !isAdmin) {
+  return res.status(403).json({
+    success: false,
+    message: "Unauthorized",
+  });
+}
 
     await Product.findByIdAndDelete(productId);
 
