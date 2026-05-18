@@ -4133,8 +4133,6 @@ app.delete("/api/admin/buyer/:id", auth, isAdmin, async (req, res) => {
   }
 });
 
-const Booking = require("../models/Booking");
-
 app.get("/api/admin/bookings", auth, isAdmin, async (req, res) => {
   try {
     const bookings = await Booking.find()
