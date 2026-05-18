@@ -3764,13 +3764,13 @@ const isAdmin = (req, res, next) => {
 // GET /api/admin/dashboard
 app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
   try {
-    const totalUsers = await Buyer.countDocuments();
+     
     const totalSellers = await Seller.countDocuments();
     const totalProducts = await Product.countDocuments();
     const totalOrders = await Order.countDocuments();
     const totalMessages = await Message.countDocuments();
     const totalBuyers=await Buyer.countDocuments();
-
+    const totalUsers=totalBuyers+totalSellers;
     // Summing revenue from all orders
     const orders = await Order.find();
     const totalRevenue = orders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
