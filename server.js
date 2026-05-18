@@ -4124,7 +4124,7 @@ app.put(
     try {
       const productId = req.params.productId;
       // Added location here from your frontend form data
-      const { name, price, description, location } = req.body;
+      const { name, price, description } = req.body;
 
       // 1. Find service
       const service = await Service.findById(productId);
@@ -4151,8 +4151,7 @@ app.put(
       let updatedData = {
         name,
         price,
-        description,
-        location,
+        description
       };
 
       // 4. Handle uploaded files if any new media is provided
