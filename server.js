@@ -3865,6 +3865,39 @@ app.delete("/api/admin/sellers/:id", auth, isAdmin, async (req, res) => {
 app.post("/api/logout", (req, res) => {
   res.json({ success: true, message: "Logged out successfully" });
 });
+
+
+app.get("/api/view_products/:id", auth, async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    const seller=await Seller.find(sellerId);
+
+    if (!seller) {
+      return res.status(404).json({ success: false, message: "Seller not found" });
+    }
+
+    // 2. FETCH PRODUCTS
+    const products = await Product.find({ seller: sellerId });
+
+    if(!products){
+      return res.json({
+        success:false,
+        message:"Products not found!"
+      })
+    }
+
+    res.json({
+      success: true,
+      seller,
+      products
+    });
+
+  } catch (error) {
+    console.error("View Products Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
