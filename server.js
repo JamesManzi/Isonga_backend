@@ -3867,7 +3867,7 @@ app.post("/api/logout", (req, res) => {
 });
 
 
-app.get("/api/view_products/:id", auth, async (req, res) => {
+app.get("/api/DeleteProducts/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
     const seller=await Seller.find(sellerId);
