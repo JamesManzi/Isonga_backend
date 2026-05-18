@@ -3734,6 +3734,7 @@ app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
     const totalProducts = await Product.countDocuments();
     const totalOrders = await Order.countDocuments();
     const totalMessages = await Message.countDocuments();
+    const totalBuyers=await Buyer.countDocuments();
 
     // Summing revenue from all orders
     const orders = await Order.find();
@@ -3746,7 +3747,8 @@ app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
       totalProducts,
       totalOrders,
       totalRevenue,
-      totalMessages
+      totalMessages,
+      totalBuyers
     });
   } catch (error) {
     console.error("Admin Dashboard Stats Error:", error);
