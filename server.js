@@ -3614,75 +3614,100 @@ res.json({ success: true, booking: updatedBooking });
         message: "Logged out successfully"
       });
     });
-
 // --- UPDATE PRODUCT ROUTE ---
-app.put("/api/products/update/:productId", auth, upload.array("files", 10), async (req, res) => {
-  try {
-    const productId = req.params.productId;
-    const { name, price, description, quantity} = req.body;
+app.put(
+  "/api/products/update/:productId",
+  auth,
+  upload.array("files", 10),
+  async (req, res) => {
+    try {
+      const productId = req.params.productId;
+      const { name, price, description, quantity } = req.body;
 
-    // 1. Find product and check ownership
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, message: "Product Not Found" });
-    }
+      // 1. Find product
+      const product = await Product.findById(productId);
 
-    if (product.seller.toString() !== req.userId) {
-      return res.status(403).json({ success: false, message: "Unauthorized" });
-    }
-
-    // 2. Prepare Update Object
-    let updatedData = {
-      name,
-      price,
-      description,
-      quantity
-    };
-
-    
-    // 3. Handle New Images (If any are uploaded)
-    if (req.files && req.files.length > 0) {
-      const Max_Size=20*1024*1024;
-      for(const file of req.files){
-        if(file.size>Max_Size){
-          return res.json({
-            success:false,
-            message:`File ${file.originalname} is too large. Max 20MB per file.`
-          })
-        }
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product Not Found",
+        });
       }
-      for(const file of req.files){
-        if(!file.mimetype.startsWith("image/")&&!file.mimetype.startsWith("video/")){
-          return res.json({
-            success:false,
-            message:"Only Images and video Allowed"
-          })
-        }
+
+      // 2. Check if user is owner OR admin
+      const isOwner = product.seller.toString() === req.userId;
+      const isAdmin = req.user?.role === "admin";
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized",
+        });
       }
-      const newFiles = req.files.map(file => file.path);
-      // Option: Replace old images or append them. 
-      // Most users expect to keep old ones + add new ones:
-      updatedData.files = [...product.files, ...newFiles];
+
+      // 3. Prepare update object
+      let updatedData = {
+        name,
+        price,
+        description,
+        quantity,
+      };
+
+      // 4. Handle uploaded files
+      if (req.files && req.files.length > 0) {
+        const MAX_SIZE = 20 * 1024 * 1024;
+
+        // File size validation
+        for (const file of req.files) {
+          if (file.size > MAX_SIZE) {
+            return res.status(400).json({
+              success: false,
+              message: `File ${file.originalname} is too large. Max 20MB per file.`,
+            });
+          }
+        }
+
+        // File type validation
+        for (const file of req.files) {
+          if (
+            !file.mimetype.startsWith("image/") &&
+            !file.mimetype.startsWith("video/")
+          ) {
+            return res.status(400).json({
+              success: false,
+              message: "Only images and videos are allowed",
+            });
+          }
+        }
+
+        const newFiles = req.files.map((file) => file.path);
+
+        // Keep old files + add new ones
+        updatedData.files = [...product.files, ...newFiles];
+      }
+
+      // 5. Update product
+      const updatedProduct = await Product.findByIdAndUpdate(
+        productId,
+        { $set: updatedData },
+        { new: true }
+      );
+
+      res.json({
+        success: true,
+        message: "Product Updated Successfully",
+        product: updatedProduct,
+      });
+    } catch (error) {
+      console.error("Update Product Error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Server Error during update",
+      });
     }
-
-    // 4. Save to Database
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { $set: updatedData },
-      { new: true }
-    );
-
-    res.json({
-      success: true,
-      message: "Product Updated Successfully",
-      product: updatedProduct
-    });
-
-  } catch (error) {
-    console.error("Update Product Error:", error);
-    res.status(500).json({ success: false, message: "Server Error during update" });
   }
-});
+);
 
 const isAdmin = (req, res, next) => {
   if (req.role !== "admin") {
@@ -3894,53 +3919,6 @@ app.get("/api/DeleteProducts/:id", auth, async (req, res) => {
 
   } catch (error) {
     console.error("View Products Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-app.delete("/api/products/delete/:productId", auth,isAdmin, async (req, res) => {
-  try {
-    const { productId } = req.params;
-
-    // Optional but recommended: verified if product belongs to the logged-in seller
-    // const product = await Product.findOneAndDelete({ _id: productId, seller: req.user.id });
-    
-    const deletedProduct = await Product.findByIdAndDelete(productId);
-
-    if (!deletedProduct) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
-
-    res.json({ success: true, message: "Product deleted successfully" });
-  } catch (error) {
-    console.error("Delete Product Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-// ==========================================
-// 3. UPDATE A SINGLE PRODUCT
-// ==========================================
-app.put("/api/products/update/:productId",isAdmin, auth, async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const { name, price, quantity, description } = req.body;
-
-    // Update product and return the updated document back
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { name, price, quantity, description },
-      { new: true, runValidators: true } // 'new: true' returns the updated data back to React
-    );
-
-    if (!updatedProduct) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
-
-    // Sends 'product' back because your React code reads: res.data.product
-    res.json({ success: true, product: updatedProduct });
-  } catch (error) {
-    console.error("Update Product Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
