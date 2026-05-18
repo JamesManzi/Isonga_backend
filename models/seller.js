@@ -13,6 +13,10 @@ const sellerSchema = new mongoose.Schema({
        type: Boolean,
         default: false 
       },
+      isSuspended:{
+        type:Boolean,
+        default:false
+      },
       role:{
         type:String,
         enum:["seller","admin"],
