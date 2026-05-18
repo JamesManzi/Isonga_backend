@@ -3635,15 +3635,15 @@ app.put(
       }
 
       // 2. Check if user is owner OR admin
-      const isOwner = product.seller.toString() === req.userId;
-      const isAdmin = req.user?.role === "admin";
+const isOwner = product.seller.toString() === req.userId;
+const isAdmin = req.role === "admin";
 
-      if (!isOwner && !isAdmin) {
-        return res.status(403).json({
-          success: false,
-          message: "Unauthorized",
-        });
-      }
+if (!isOwner && !isAdmin) {
+  return res.status(403).json({
+    success: false,
+    message: "Unauthorized",
+  });
+}
 
       // 3. Prepare update object
       let updatedData = {
