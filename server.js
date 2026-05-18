@@ -4133,21 +4133,29 @@ app.delete("/api/admin/buyer/:id", auth, isAdmin, async (req, res) => {
   }
 });
 
+const Booking = require("../models/Booking");
+
 app.get("/api/admin/bookings", auth, isAdmin, async (req, res) => {
   try {
     const bookings = await Booking.find()
-      .populate("user", "name email phone")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
 
-    res.json({
+      .populate("buyer", "name email phone")
+      .populate("seller", "shopName email")
+      .populate("product", "name price");
+
+    res.status(200).json({
       success: true,
       bookings,
     });
+
   } catch (err) {
-    console.error(err);
+    console.error("BOOKINGS ERROR:", err);
+
     res.status(500).json({
       success: false,
-      message: "Failed to load bookings",
+      message: "Failed to fetch bookings",
+      error: err.message,
     });
   }
 });
