@@ -3898,6 +3898,52 @@ app.get("/api/DeleteProducts/:id", auth, async (req, res) => {
   }
 });
 
+app.delete("/api/products/delete/:productId", auth, async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    // Optional but recommended: verified if product belongs to the logged-in seller
+    // const product = await Product.findOneAndDelete({ _id: productId, seller: req.user.id });
+    
+    const deletedProduct = await Product.findByIdAndDelete(productId);
+
+    if (!deletedProduct) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    res.json({ success: true, message: "Product deleted successfully" });
+  } catch (error) {
+    console.error("Delete Product Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+// ==========================================
+// 3. UPDATE A SINGLE PRODUCT
+// ==========================================
+app.put("/api/products/update/:productId", auth, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { name, price, quantity, description } = req.body;
+
+    // Update product and return the updated document back
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { name, price, quantity, description },
+      { new: true, runValidators: true } // 'new: true' returns the updated data back to React
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // Sends 'product' back because your React code reads: res.data.product
+    res.json({ success: true, product: updatedProduct });
+  } catch (error) {
+    console.error("Update Product Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
 
 app.get("/api/DeleteServices/:id", auth, async (req, res) => {
   try {
