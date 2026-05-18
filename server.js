@@ -2031,7 +2031,6 @@ socket.on("userOnline", (data) => {
       console.error("messagesRead Error:", err);
     }
   });
-const mongoose = require("mongoose"); // Ensure mongoose is imported at the top of your file
 
 socket.on("deleteMessage", async ({ messageId, room, forEveryone }) => {
   try {
