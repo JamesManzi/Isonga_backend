@@ -3446,6 +3446,8 @@ res.json({ success: true, booking: updatedBooking });
         });
       }
     });
+
+
     
     app.put(
   "/api/update_buyer_profile",
@@ -4252,6 +4254,48 @@ app.put(
     }
   }
 );
+
+ // DELETE NOTIFICATION
+app.delete("/api/notifications/:id", auth, async (req, res) => {
+  try {
+    const notificationId = req.params.id;
+
+    const notification = await Notification.findById(notificationId);
+
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    // Security check
+    const isRecipient =
+      notification.recipient.toString() === req.userId.toString();
+
+    if (!isRecipient) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this notification",
+      });
+    }
+
+    await Notification.findByIdAndDelete(notificationId);
+
+    res.json({
+      success: true,
+      message: "Notification deleted successfully",
+    });
+
+  } catch (err) {
+    console.error("Delete Notification Error:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error while deleting notification",
+    });
+  }
+});
 
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
