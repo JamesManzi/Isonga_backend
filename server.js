@@ -1444,17 +1444,14 @@ app.get("/api/Service_Products/:id", auth, async (req, res) => {
     return res.status(500).json({ success: false, message: "View Products Server Error" });
   }
 })
-
 app.get("/api/Asset_Products/:id", auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
-   const updatedSeller = await Seller.findByIdAndUpdate(
+
+    // 1. UPDATE SELLER VIEWS
+    const updatedSeller = await Seller.findByIdAndUpdate(
       sellerId,
-      {
-         $inc: {
-           views: 1 
-          } 
-        },
+      { $inc: { views: 1 } },
       { new: true }
     );
 
@@ -1465,31 +1462,41 @@ app.get("/api/Asset_Products/:id", auth, async (req, res) => {
     // 2. FETCH PRODUCTS
     const products = await Product.find({ seller: sellerId });
 
-    if(!products){
-      return res.json({
-        success:false,
-        message:"Products not found!"
-      })
+    // Note: Mongoose .find() returns an empty array [] if nothing matches, not null.
+    // Checking (!products) won't catch an empty list, so we check the array length instead.
+    if (!products || products.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No products found for this seller!"
+      });
     }
+
     // 3. EMIT REAL-TIME UPDATE TO SELLER
     const sellerRoom = `Seller_${sellerId}`;
     
-    // This sends the updated count to the Seller's dashboard immediately
-    io.to(sellerRoom).emit("viewUpdate", {
-      totalViews: updatedSeller.views,
-      timestamp: new Date()
+    // Safely look for io on the app object if it's imported in another file
+    const socketInstance = req.app.get("socketio") || io; 
+    
+    if (socketInstance) {
+      socketInstance.to(sellerRoom).emit("viewUpdate", {
+        totalViews: updatedSeller.views,
+        timestamp: new Date()
+      });
+    }
+
+    // 4. SEND SUCCESS RESPONSE
+    // Changed 'seller' to 'updatedSeller' to match your variable above
+    return res.json({
+      success: true,
+      seller: updatedSeller, 
+      products: products
     });
 
-    res.json({
-      success: true,
-      seller,
-      products
-    })
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({ success: false, message: "View Products Error" });
+    console.error("Error in /api/Asset_Products route:", error);
+    return res.status(500).json({ success: false, message: "View Products Error", details: error.message });
   }
-})
+});
 
 app.get("/api/sellers/:category", auth, async (req, res) => {
   try {
