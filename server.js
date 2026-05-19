@@ -2263,23 +2263,35 @@ app.get("/api/seller/conversations", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-// 1. GET messages for a specific room (Updated with Population)
-app.get("/api/messages/:room", async (req, res) => {
+app.get("/api/messages/:room", auth, async (req, res) => {
   try {
-    const messages = await Message.find({ room: req.params.room })
-      // This "joins" the referenced message so you get the actual text
+    const messages = await Message.find({
+      room: req.params.room,
+
+      // Hide messages deleted for this user
+      deletedFor: {
+        $ne: req.userId,
+      },
+    })
       .populate({
         path: "replyTo",
-        select: "message files sender senderModel" // Only fetch fields needed for the quote box
+        select: "message files sender senderModel",
       })
-      // This "joins" the product data if the message is a product inquiry
       .populate("productId", "name price files")
       .sort({ createdAt: 1 });
 
-    res.json({ success: true, messages });
+    res.json({
+      success: true,
+      messages,
+    });
+
   } catch (err) {
     console.error("Fetch Messages Error:", err);
-    res.status(500).json({ success: false, message: "Could not load messages" });
+
+    res.status(500).json({
+      success: false,
+      message: "Could not load messages",
+    });
   }
 });
 
