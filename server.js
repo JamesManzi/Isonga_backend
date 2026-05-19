@@ -2433,118 +2433,213 @@ app.get("/api/get_seller/:id", auth, async (req, res) => {
   if (!seller) return res.json({ success: false });
   res.json({ success: true, seller });
 });
-
 // GET /api/buyer/conversations
 app.get("/api/buyer/conversations", auth, async (req, res) => {
   try {
     const buyerObjectId = new mongoose.Types.ObjectId(req.userId);
 
     const conversations = await Message.aggregate([
-      // 1. Get messages related to this buyer
+
+      // 1. Get only buyer-related messages
+      // AND exclude messages deleted for this buyer
       {
         $match: {
-          $or: [
-            { sender: buyerObjectId, senderModel: "Buyer" },
-            { receiver: buyerObjectId, receiverModel: "Buyer" }
-          ]
-        }
+          $and: [
+            {
+              $or: [
+                {
+                  sender: buyerObjectId,
+                  senderModel: "Buyer",
+                },
+                {
+                  receiver: buyerObjectId,
+                  receiverModel: "Buyer",
+                },
+              ],
+            },
+
+            // Hide messages deleted for this buyer
+            {
+              deletedFor: {
+                $ne: buyerObjectId,
+              },
+            },
+          ],
+        },
       },
 
-      { $sort: { createdAt: -1 } },
+      // 2. Latest messages first
+      {
+        $sort: {
+          createdAt: -1,
+        },
+      },
 
-      // 2. Group into conversations and identify the Seller
+      // 3. Group into conversations
       {
         $group: {
           _id: "$room",
-          lastMessage: { $first: "$message" },
-          updatedAt: { $first: "$createdAt" },
+
+          // Latest visible message
+          lastMessage: {
+            $first: "$message",
+          },
+
+          updatedAt: {
+            $first: "$createdAt",
+          },
+
+          lastFiles: {
+            $first: "$files",
+          },
+
+          lastSender: {
+            $first: "$sender",
+          },
+
+          lastSenderModel: {
+            $first: "$senderModel",
+          },
+
+          // Extract seller ID
           sellerId: {
             $first: {
               $cond: [
-                { $eq: ["$senderModel", "Seller"] },
+                {
+                  $eq: ["$senderModel", "Seller"],
+                },
                 "$sender",
-                "$receiver"
-              ]
-            }
+                "$receiver",
+              ],
+            },
           },
+
+          // Count unread messages
           unreadCount: {
             $sum: {
               $cond: [
                 {
                   $and: [
-                    { $eq: ["$receiver", buyerObjectId] },
-                    { $eq: ["$read", false] }
-                  ]
+                    {
+                      $eq: ["$receiver", buyerObjectId],
+                    },
+                    {
+                      $eq: ["$read", false],
+                    },
+                  ],
                 },
                 1,
-                0
-              ]
-            }
-          }
-        }
+                0,
+              ],
+            },
+          },
+        },
       },
 
-      // 3. Join conversation table for deletion checks
+      // 4. Join conversations collection
       {
         $lookup: {
           from: "conversations",
           localField: "_id",
           foreignField: "room",
-          as: "conv"
-        }
-      },
-      {
-        $addFields: {
-          conv: { $arrayElemAt: ["$conv", 0] }
-        }
+          as: "conv",
+        },
       },
 
-      // 4. Filter out conversations deleted by the buyer
+      // 5. Flatten conversation object
+      {
+        $addFields: {
+          conv: {
+            $arrayElemAt: ["$conv", 0],
+          },
+        },
+      },
+
+      // 6. Remove conversations deleted by buyer
       {
         $match: {
           $expr: {
             $not: {
               $in: [
                 buyerObjectId,
-                { $ifNull: ["$conv.deletedFor", []] }
-              ]
-            }
-          }
-        }
+                {
+                  $ifNull: ["$conv.deletedFor", []],
+                },
+              ],
+            },
+          },
+        },
       },
 
-      // 5. Lookup Seller details
+      // 7. Lookup seller details
       {
         $lookup: {
           from: "sellers",
           localField: "sellerId",
           foreignField: "_id",
-          as: "seller"
-        }
+          as: "seller",
+        },
       },
-      { $unwind: { path: "$seller", preserveNullAndEmptyArrays: true } },
 
-      // 6. Final Shape
+      // 8. Preserve conversations even if seller missing
+      {
+        $unwind: {
+          path: "$seller",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // 9. Final response shape
       {
         $project: {
           _id: 0,
+
           room: "$_id",
+
           lastMessage: 1,
           updatedAt: 1,
+
           unreadCount: 1,
-          roomUnreadCount: "$unreadCount", // For socket consistency
+
+          // Helpful for sockets/live updates
+          roomUnreadCount: "$unreadCount",
+
+          lastFiles: 1,
+          lastSender: 1,
+          lastSenderModel: 1,
+
           sellerId: 1,
-          sellerName: { $ifNull: ["$seller.name", "Unknown Seller"] },
-          sellerProfile: { $ifNull: ["$seller.profile", ""] }
-        }
+
+          sellerName: {
+            $ifNull: ["$seller.name", "Unknown Seller"],
+          },
+
+          sellerProfile: {
+            $ifNull: ["$seller.profile", ""],
+          },
+        },
       },
-      { $sort: { updatedAt: -1 } }
+
+      // 10. Latest conversations first
+      {
+        $sort: {
+          updatedAt: -1,
+        },
+      },
     ]);
 
-    res.json({ success: true, conversations });
+    res.json({
+      success: true,
+      conversations,
+    });
+
   } catch (err) {
     console.error("Buyer Conversation Error:", err);
-    res.status(500).json({ success: false });
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch conversations",
+    });
   }
 });
 // GET all sellers for public home
