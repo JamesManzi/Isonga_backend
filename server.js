@@ -3262,7 +3262,7 @@ app.get("/api/orders/:id", auth, async (req, res) => {
 
     // POST: Create a new booking
     // Note: "paymentProof" here must match the key used in formData.append() on frontend
-    app.post("/api/bookService", auth, upload.single("paymentProof",1), async (req, res) => {
+    app.post("/api/bookService", auth, upload.single("paymentProof"), async (req, res) => {
       try {
 
         const { productId, name, phone, date, time, message, paymentMethod } = req.body;
