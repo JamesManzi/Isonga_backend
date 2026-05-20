@@ -4480,7 +4480,11 @@ app.delete("/api/notifications/:id", auth, async (req, res) => {
 
 app.get("/api/admin/booking",auth,async(req,res)=>{
   try {
-    const booking=await Booking.find().populate("product");
+const booking = await Booking.find()
+  .populate("buyer")
+  .populate("seller")
+  .populate("product");
+
     if(!booking){
       return res.json({
         success:false,
