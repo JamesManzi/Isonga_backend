@@ -4025,17 +4025,13 @@ app.get("/api/admin/users", auth, isAdmin, async (req, res) => {
   }
 });
 
-// GET /api/admin/orders?limit=5
 app.get("/api/admin/orders", auth, isAdmin, async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 5;
-    const recentOrders = await Order.find()
-      .sort({ createdAt: -1 })
-      .limit(limit);
+    const allOrders = await Order.find().sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      orders: recentOrders
+      orders: allOrders
     });
   } catch (error) {
     console.error("Admin Fetch Orders Error:", error);
@@ -4501,21 +4497,6 @@ const booking = await Booking.find()
   }
 })
 
-app.get("/api/admin/order",auth,async(req,res)=>{
-  try {
-    const order=await Order.find()
-    .populate("buyer")
-    .populate("items.seller")
-    .populate("items.product")
-
-    res.json({
-      success:true,
-      order
-    })
-  } catch (error) {
-    console.log("Fetching admin Orders error",error);
-  }
-})
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
