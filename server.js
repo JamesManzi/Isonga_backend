@@ -3611,8 +3611,9 @@ res.json({ success: true, booking: updatedBooking });
         //  Security check (same as order)
         const isBuyer = booking.buyer.toString() === req.userId.toString();
         const isSeller = booking.seller.toString() === req.userId.toString();
+        const isAdmin=req.role==="admin";
 
-        if (!isBuyer && !isSeller) {
+        if (!isBuyer && !isSeller&&!isAdmin) {
           return res.status(403).json({
             success: false,
             message: "Not authorized to view this booking",
