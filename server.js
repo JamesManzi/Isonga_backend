@@ -1197,7 +1197,7 @@ app.get("/api/seller_profile", auth, async (req, res) => {
     // Get ratings with buyer name AND profile
     const ratings = await Rating.find({ seller: seller._id })
       .populate("buyer", "name profile") //  populate profile too
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: 1 });
       const numReviews=ratings.length
       const totalRating=ratings.reduce((sum,r)=>{
         return sum+r.rating
