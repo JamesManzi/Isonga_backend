@@ -3661,12 +3661,6 @@ res.json({ success: true, booking: updatedBooking });
         updateData.password = await bcrypt.hash(req.body.password, 12);
       }
 
-      if(!req.body.name||!req.body.password||!req.body.confirmPassword){
-        return res.json({
-          success:false,
-          message:"All fields required"
-        })
-      }
       // =========================
       // PROFILE IMAGE UPDATE
       // =========================
@@ -4367,7 +4361,7 @@ app.delete("/api/admin/buyer/:id", auth, isAdmin, async (req, res) => {
       });
     }
 
-    await User.findByIdAndDelete(req.params.id);
+    await Buyer.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
