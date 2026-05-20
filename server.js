@@ -4478,6 +4478,25 @@ app.delete("/api/notifications/:id", auth, async (req, res) => {
   }
 });
 
+app.get("/api/admin/booking",auth,async(req,res)=>{
+  try {
+    const booking=await Booking.find().populate("product");
+    if(!booking){
+      return res.json({
+        success:false,
+        message:"Booking Not Found"
+      })
+    }
+
+    res.json({
+      success:true,
+      booking
+    })
+  } catch (error) {
+    console.log("Fetching Admin Booking Error",error);
+  }
+})
+
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
