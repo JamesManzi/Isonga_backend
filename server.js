@@ -3275,7 +3275,7 @@ app.get("/api/orders/:id", auth, async (req, res) => {
         0
       );
 
-      // ✅ FIX: extract proof ONCE here
+     
       const proof =
         order.paymentProofsBySeller instanceof Map
           ? order.paymentProofsBySeller.get(sellerId)
@@ -3446,8 +3446,7 @@ app.get("/api/orders/:id", auth, async (req, res) => {
       });
     });
 
-    // POST: Create a new booking
-    // Note: "paymentProof" here must match the key used in formData.append() on frontend
+    
     app.post("/api/bookService", auth, upload.single("paymentProof"), async (req, res) => {
       try {
 
@@ -3563,10 +3562,7 @@ res.json({
           category: "Booking"
         });
 
-        //  SOCKET REAL-TIME
-       // ... inside app.put("/api/bookings/:id") after creating the Notification ...
-
-//  USE ROOMS FOR BUYER NOTIFICATIONS
+      
 const buyerRoom = `Buyer_${updatedBooking.buyer}`;
 
 const unreadCount = await Notification.countDocuments({
@@ -3611,9 +3607,8 @@ res.json({ success: true, booking: updatedBooking });
         //  Security check (same as order)
         const isBuyer = booking.buyer.toString() === req.userId.toString();
         const isSeller = booking.seller.toString() === req.userId.toString();
-        const isAdmin=req.role==="admin";
 
-        if (!isBuyer && !isSeller&&!isAdmin) {
+        if (!isBuyer && !isSeller) {
           return res.status(403).json({
             success: false,
             message: "Not authorized to view this booking",
@@ -4396,41 +4391,6 @@ app.get("/api/admin/bookings", auth, isAdmin, async (req, res) => {
     });
   }
 });
-
-app.put(
-  "/api/admin/booking/status/:id",
-  auth,
-  isAdmin,
-  async (req, res) => {
-    try {
-      const { status } = req.body;
-
-      const booking = await Booking.findById(req.params.id);
-
-      if (!booking) {
-        return res.status(404).json({
-          success: false,
-          message: "Booking not found",
-        });
-      }
-
-      booking.status = status;
-      await booking.save();
-
-      res.json({
-        success: true,
-        message: "Booking updated",
-        booking,
-      });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-    }
-  }
-);
 
  // DELETE NOTIFICATION
 app.delete("/api/notifications/:id", auth, async (req, res) => {
