@@ -4490,7 +4490,7 @@ app.get("/api/admin/booking",auth,async(req,res)=>{
 
     res.json({
       success:true,
-      booking
+      bookings:booking
     })
   } catch (error) {
     console.log("Fetching Admin Booking Error",error);
