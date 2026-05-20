@@ -4501,6 +4501,21 @@ const booking = await Booking.find()
   }
 })
 
+app.get("/api/admin/order",auth,async(req,res)=>{
+  try {
+    const order=await Order.find()
+    .populate("buyer")
+    .populate("seller")
+    .populate("product")
+
+    res.json({
+      success:true,
+      order
+    })
+  } catch (error) {
+    console.log("Fetching admin Orders error",error);
+  }
+})
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
       console.log(` Server is running on port ${PORT}`);
