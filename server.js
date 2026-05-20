@@ -4505,8 +4505,8 @@ app.get("/api/admin/order",auth,async(req,res)=>{
   try {
     const order=await Order.find()
     .populate("buyer")
-    .populate("seller")
-    .populate("product")
+    .populate("items.seller")
+    .populate("items.product")
 
     res.json({
       success:true,
