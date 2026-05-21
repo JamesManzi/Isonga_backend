@@ -447,10 +447,16 @@ app.post("/api/login", emailLimiter, async (req, res) => {
 
 app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
   try {
-    const { name, email, password,repeat_pass} = req.body;
+    const { name, email, password,repeat_pass,acceptedPolicies} = req.body;
    if (!name || !email || !password || !repeat_pass) {
   res.json({ success: false, message: "All Fields Required" });
   return;
+}
+if (!acceptedPolicies) {
+    return res.status(400).json({
+        success:false,
+        message:"You must accept Privacy Policy & Rules"
+    });
 }
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 if(!emailRegex.test(email)){
@@ -512,6 +518,7 @@ if(!emailRegex.test(email)){
       email,
       password: hashed,
       profile,
+      acceptedPolicies,
       verificationCode: code,
       verificationExpires: Date.now() + 10 * 60 * 1000
     });
