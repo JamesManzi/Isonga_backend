@@ -3448,6 +3448,32 @@ app.get("/api/orders/:id", auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+app.get("/api/product/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate("seller", "name phone");
+
+    if (!product) {
+      return res.json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      product
+    });
+
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
     app.get("/api/buyer_profile", auth, async (req, res) => {
       try {
 
