@@ -133,13 +133,20 @@ app.post("/api/register", upload.fields([
   { name: "files", maxCount: 6 }
 ]), async (req, res) => {
   try {
-    const { name, location, phone, email, password, description, category, sellerType,repeat_pass } = req.body;
+    const { name, location, phone, email, password, description, category, sellerType,repeat_pass,acceptedPolicies } = req.body;
 if(!name||!location||!phone||!email||!password||!description||!category||!sellerType||!repeat_pass){
   res.json({
     success:false,
     message:"All Field Required please"
   })
   return
+}
+
+if (acceptedPolicies !== "true") {
+  return res.status(400).json({
+    success:false,
+    message:"Please accept Privacy Policy & Marketplace Rules"
+  });
 }
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 if(!emailRegex.test(email)){

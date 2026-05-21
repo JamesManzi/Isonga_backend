@@ -13,6 +13,11 @@ const sellerSchema = new mongoose.Schema({
        type: Boolean,
         default: false 
       },
+      acceptedPolicies: {
+    type: Boolean,
+    required: true,
+    default: false
+},
       isSuspended:{
         type:Boolean,
         default:false
