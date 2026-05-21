@@ -72,7 +72,7 @@ notes: {
     deliveryMethod: {
       type: String,
       enum: ["standard", "express", "pickup"],
-      default: null
+      default: ""
     },
 
     deliveryDate: {
@@ -83,7 +83,7 @@ notes: {
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile"],
-      default: null
+      default: ""
     },
 
     // ✅ IMPROVED: payment proof per seller
