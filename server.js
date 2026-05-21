@@ -455,8 +455,15 @@ app.post("/api/buyer_register", upload.single("profile"), async (req, res) => {
 if (!acceptedPolicies) {
     return res.status(400).json({
         success:false,
-        message:"You must accept Privacy Policy & Rules"
+        message:" Privacy Policy & Rules Required"
     });
+}
+
+if (acceptedPolicies !== "true") {
+  return res.status(400).json({
+    success: false,
+    message: "Please accept Privacy Policy & Rules"
+  });
 }
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 if(!emailRegex.test(email)){
