@@ -62,7 +62,12 @@ const OrderSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
-
+    // 📝 Customer Message
+notes: {
+  type: String,
+  trim: true,
+  default: ""
+},
     // 🚚 Delivery
     deliveryMethod: {
       type: String,

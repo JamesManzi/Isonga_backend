@@ -2976,6 +2976,7 @@ app.post("/api/order", auth, upload.any(), async (req, res) => {
       name,
       phone,
       address,
+      notes,
       deliveryMethod,
       deliveryDate: deliveryDate || null,
       paymentMethod,
