@@ -142,6 +142,13 @@ if(!name||!location||!phone||!email||!password||!description||!category||!seller
   return
 }
 
+if(!acceptedPolicies){
+  return res.json({
+    success:false,
+    message:"Privacy Policy & Marketplace Rules Required"
+  })
+}
+
 if (acceptedPolicies !== "true") {
   return res.status(400).json({
     success:false,
