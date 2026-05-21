@@ -251,6 +251,7 @@ const files = req.files.files.map(f => f.path);
       password: hash,
       description,
       category,
+      acceptedPolicies,
       sellerType,
       isVerified: false, 
       verificationCode: code,
