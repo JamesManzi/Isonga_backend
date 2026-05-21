@@ -49,7 +49,12 @@ const bookingSchema = new mongoose.Schema({
   type: Boolean,
   default: false
 },
-  paymentMethod: { type: String, enum: ["cash", "mobile", "card"], required: true },
+  paymentMethod: { 
+    type: String,
+     enum: ["cash", "mobile", "card"],
+     default:"",
+      required: true 
+    },
 paymentScreenshot: { type: String }, // store Cloudinary URL or file path
   createdAt: {
     type: Date,
