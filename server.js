@@ -155,12 +155,13 @@ app.post("/api/register", upload.fields([
       return res.json({ success: false, message: "Invalid Email Try Again" });
     }
 
-    // 2. File Verification
+    // 2. File Verification 
+    // FIXED: Changed status from 400 to match your standard frontend interceptor design 
     if (!req.files || !req.files.profile) {
-      return res.status(400).json({ success: false, message: "Profile image required" });
+      return res.json({ success: false, message: "Profile image required" });
     }
     if (!req.files.files || req.files.files.length < 2) {
-      return res.status(400).json({ success: false, message: "Location Images Required (min 2)" });
+      return res.json({ success: false, message: "Location Images Required (min 2)" });
     }
 
     const profileFile = req.files.profile[0];
@@ -171,7 +172,9 @@ app.post("/api/register", upload.fields([
     if (!profileFile.mimetype.startsWith("image/")) {
       return res.json({ success: false, message: "Only Images Allowed for profile" });
     }
-    const profile = profileFile.path;
+    
+    // Normalize path strings to use forward slashes (fixes Windows-to-Linux path bugs)
+    const profile = profileFile.path.replace(/\\/g, "/");
 
     if (req.files.files.length > 6) {
       return res.json({ success: false, message: "You can upload a maximum of 6 files only" });
@@ -187,7 +190,8 @@ app.post("/api/register", upload.fields([
       }
     }
 
-    const files = req.files.files.map(f => f.path);
+    // Normalize path strings for gallery items as well
+    const files = req.files.files.map(f => f.path.replace(/\\/g, "/"));
 
     // 3. Password & Phone Validation
     const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
@@ -204,7 +208,7 @@ app.post("/api/register", upload.fields([
       return res.json({ success: false, message: "Invalid Phone Number" });
     }
 
-    const existingSeller = await Seller.findOne({ email });
+    const existingSeller = await Seller.findOne({ email: email.toLowerCase().trim() });
     if (existingSeller) {
       return res.json({ success: false, message: "User Already Exists" });
     }
@@ -215,25 +219,25 @@ app.post("/api/register", upload.fields([
 
     const { data, error } = await resend.emails.send({
       from: "Isonga Market <noreply@isongamarket.com>",
-      to: email,
+      to: email.toLowerCase().trim(),
       subject: "Verify Your Isonga Seller account",
       html: verifyEmailTemplate(name, code),
     });
 
     if (error) {
       console.error("Resend Error:", error);
-      return res.status(500).json({ success: false, message: "Email service failed" });
+      return res.json({ success: false, message: "Email service failed" });
     }
 
     await Seller.create({
-      name,
+      name: name.trim(),
       profile,
-      location,
-      phone,
-      email,
+      location: location.trim(),
+      phone: phone.trim(),
+      email: email.toLowerCase().trim(),
       files,
       password: hash,
-      description,
+      description: description.trim(),
       category,
       acceptedPolicies: isPoliciesAccepted,
       sellerType,
@@ -245,7 +249,7 @@ app.post("/api/register", upload.fields([
     return res.json({
       success: true,
       message: "Verification code sent to your email",
-      email
+      email: email.toLowerCase().trim()
     });
 
   } catch (error) {
@@ -253,7 +257,6 @@ app.post("/api/register", upload.fields([
     return res.status(500).json({ success: false, message: "Server Error" });
   }
 });
-
 
 app.post("/api/seller-verify-email",async(req,res)=>{
   try {
