@@ -23,7 +23,7 @@ const storage = new CloudinaryStorage({
       // Fix 1: Explicitly authorize 'heic' and 'heif' so Cloudinary doesn't reject mobile streams
       allowed_formats: isVideo
         ? ["mp4", "webm", "ogg"]
-        : ["jpg", "png", "jpeg", "gif", "heic", "heif"],
+        : ["jpg", "png", "jpeg", "gif", "heic", "heif","webp"],
 
       // Fix 2: Tell Cloudinary to convert incoming HEIC images into web-safe JPGs automatically
       format: isVideo ? undefined : (isMobileFormat ? "jpg" : undefined),
