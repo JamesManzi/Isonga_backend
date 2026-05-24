@@ -128,14 +128,26 @@ mongoose.connect(process.env.MONGO_URL)
   })
   .catch((error) => console.log(" DB connection error:", error));
 // Seller Register with Email Verification
-app.post("/api/register", upload.fields([
-  { name: "profile", maxCount: 1 },
-  { name: "files", maxCount: 6 }
-]), async (req, res) => {
+app.post("/api/register", (req, res, next) => {
+  // 1. Safe Wrapper: Catch Multer/Cloudinary stream exceptions gracefully before they crash the thread
+  upload.fields([
+    { name: "profile", maxCount: 1 },
+    { name: "files", maxCount: 6 }
+  ])(req, res, function (err) {
+    if (err) {
+      console.error("Multer/Cloudinary upload error:", err);
+      return res.json({ 
+        success: false, 
+        message: err.message || "Upload failed. Please check image files and try again." 
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     const { name, location, phone, email, password, description, category, sellerType, repeat_pass, acceptedPolicies } = req.body;
 
-    // 1. Structural Validation
+    // 2. Structural Validation
     if (!name || !location || !phone || !email || !password || !description || !category || !sellerType || !repeat_pass) {
       return res.json({ success: false, message: "All fields are required please" });
     }
@@ -155,8 +167,7 @@ app.post("/api/register", upload.fields([
       return res.json({ success: false, message: "Invalid Email Try Again" });
     }
 
-    // 2. File Verification 
-    // FIXED: Changed status from 400 to match your standard frontend interceptor design 
+    // 3. File Verification 
     if (!req.files || !req.files.profile) {
       return res.json({ success: false, message: "Profile image required" });
     }
@@ -169,31 +180,25 @@ app.post("/api/register", upload.fields([
     if (profileFile.size > profileMaxSize) {
       return res.json({ success: false, message: "Profile image: 5MB Max Allowed" });
     }
-    if (!profileFile.mimetype.startsWith("image/")) {
-      return res.json({ success: false, message: "Only Images Allowed for profile" });
-    }
     
-    // Normalize path strings to use forward slashes (fixes Windows-to-Linux path bugs)
-    const profile = profileFile.path.replace(/\\/g, "/");
+    // Cloudinary stores the direct secure HTTPS URL into file.path automatically.
+    const profile = profileFile.path;
 
     if (req.files.files.length > 6) {
       return res.json({ success: false, message: "You can upload a maximum of 6 files only" });
     }
 
-    const fileSize = 10 * 1024 * 1024; // 10MB
+    const maxGallerySize = 10 * 1024 * 1024; // 10MB
     for (let file of req.files.files) {
-      if (file.size > fileSize) {
+      if (file.size > maxGallerySize) {
         return res.json({ success: false, message: "Each location file must be under 10MB" });
-      }
-      if (!file.mimetype.startsWith("image/")) {
-        return res.json({ success: false, message: "Only Images Allowed in gallery" });
       }
     }
 
-    // Normalize path strings for gallery items as well
-    const files = req.files.files.map(f => f.path.replace(/\\/g, "/"));
+    // Map Cloudinary secure URLs straight into your array strings
+    const files = req.files.files.map(f => f.path);
 
-    // 3. Password & Phone Validation
+    // 4. Password & Phone Validation
     const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
     if (!rule.test(password)) {
       return res.json({ success: false, message: "Please use strong password" });
@@ -208,20 +213,21 @@ app.post("/api/register", upload.fields([
       return res.json({ success: false, message: "Invalid Phone Number" });
     }
 
-    const existingSeller = await Seller.findOne({ email: email.toLowerCase().trim() });
+    const sanitizedEmail = email.toLowerCase().trim();
+    const existingSeller = await Seller.findOne({ email: sanitizedEmail });
     if (existingSeller) {
       return res.json({ success: false, message: "User Already Exists" });
     }
 
-    // 4. Processing
+    // 5. Processing
     const hash = await bcrypt.hash(password, 12);
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
     const { data, error } = await resend.emails.send({
       from: "Isonga Market <noreply@isongamarket.com>",
-      to: email.toLowerCase().trim(),
+      to: sanitizedEmail,
       subject: "Verify Your Isonga Seller account",
-      html: verifyEmailTemplate(name, code),
+      html: verifyEmailTemplate(name.trim(), code),
     });
 
     if (error) {
@@ -234,7 +240,7 @@ app.post("/api/register", upload.fields([
       profile,
       location: location.trim(),
       phone: phone.trim(),
-      email: email.toLowerCase().trim(),
+      email: sanitizedEmail,
       files,
       password: hash,
       description: description.trim(),
@@ -249,7 +255,7 @@ app.post("/api/register", upload.fields([
     return res.json({
       success: true,
       message: "Verification code sent to your email",
-      email: email.toLowerCase().trim()
+      email: sanitizedEmail
     });
 
   } catch (error) {
