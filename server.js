@@ -133,111 +133,95 @@ app.post("/api/register", upload.fields([
   { name: "files", maxCount: 6 }
 ]), async (req, res) => {
   try {
-    const { name, location, phone, email, password, description, category, sellerType,repeat_pass,acceptedPolicies } = req.body;
-if(!name||!location||!phone||!email||!password||!description||!category||!sellerType||!repeat_pass){
-  res.json({
-    success:false,
-    message:"All Field Required please"
-  })
-  return
-}
+    const { name, location, phone, email, password, description, category, sellerType, repeat_pass, acceptedPolicies } = req.body;
 
-if(!acceptedPolicies){
-  return res.json({
-    success:false,
-    message:"Privacy Policy & Marketplace Rules Required"
-  })
-}
+    // 1. Structural Validation
+    if (!name || !location || !phone || !email || !password || !description || !category || !sellerType || !repeat_pass) {
+      return res.json({ success: false, message: "All fields are required please" });
+    }
 
-if (acceptedPolicies !== "true") {
-  return res.status(400).json({
-    success:false,
-    message:"Please accept Privacy Policy & Marketplace Rules"
-  });
-}
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-if(!emailRegex.test(email)){
-  return res.json({success:false,message:"Invalid Email Try Again"})
-}
-    // 1. Basic Checks
+    // Convert string "true"/"false" from FormData safely to an actual boolean
+    const isPoliciesAccepted = acceptedPolicies === "true" || acceptedPolicies === true;
+
+    if (!isPoliciesAccepted) {
+      return res.json({
+        success: false,
+        message: "Please accept Privacy Policy & Marketplace Rules"
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.json({ success: false, message: "Invalid Email Try Again" });
+    }
+
+    // 2. File Verification
+    if (!req.files || !req.files.profile) {
+      return res.status(400).json({ success: false, message: "Profile image required" });
+    }
+    if (!req.files.files || req.files.files.length < 2) {
+      return res.status(400).json({ success: false, message: "Location Images Required (min 2)" });
+    }
+
+    const profileFile = req.files.profile[0];
+    const profileMaxSize = 5 * 1024 * 1024;
+    if (profileFile.size > profileMaxSize) {
+      return res.json({ success: false, message: "Profile image: 5MB Max Allowed" });
+    }
+    if (!profileFile.mimetype.startsWith("image/")) {
+      return res.json({ success: false, message: "Only Images Allowed for profile" });
+    }
+    const profile = profileFile.path;
+
+    if (req.files.files.length > 6) {
+      return res.json({ success: false, message: "You can upload a maximum of 6 files only" });
+    }
+
+    const fileSize = 10 * 1024 * 1024; // 10MB
+    for (let file of req.files.files) {
+      if (file.size > fileSize) {
+        return res.json({ success: false, message: "Each location file must be under 10MB" });
+      }
+      if (!file.mimetype.startsWith("image/")) {
+        return res.json({ success: false, message: "Only Images Allowed in gallery" });
+      }
+    }
+
+    const files = req.files.files.map(f => f.path);
+
+    // 3. Password & Phone Validation
+    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+    if (!rule.test(password)) {
+      return res.json({ success: false, message: "Please use strong password" });
+    }
+
+    if (password !== repeat_pass) {
+      return res.json({ success: false, message: "Passwords must match" });
+    }
+
+    const regex = /^(07(8|9|2|3)\d{7})$/;
+    if (!regex.test(phone)) {
+      return res.json({ success: false, message: "Invalid Phone Number" });
+    }
+
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) {
       return res.json({ success: false, message: "User Already Exists" });
     }
-      
-    const profileMaxSize = 5 * 1024 * 1024;
-    if (!req.files || !req.files.profile) {
-      return res.status(400).json({ success: false, message: "Profile image required" });
-    }
-     const profileFile = req.files.profile[0];
-     if (profileFile.size > profileMaxSize) {
-  return res.json({
-    success: false,
-    message: "Profile image: 5MB Max Allowed"
-  });
-}
-if(!profileFile.mimetype.startsWith("image/")){
-  return res.json({success:false,message:"Only Images Allowed"});
-}
-const profile = profileFile.path;
 
-const fileSize = 10 * 1024 * 1024; // 10MB
-
-if (!req.files || !req.files.files || req.files.files.length < 2) {
-  return res.status(400).json({
-    success: false,
-    message: "Location Images Required (min 2)"
-  });
-}
-if(req.files.files.length>6){
-  return res.json({
-    success:false,
-   message: "You can upload a maximum of 6 files only"
-  })
-}
-for (let file of req.files.files) {
-  if (file.size > fileSize) {
-    return res.json({
-      success: false,
-      message: `Each file must be under 10MB`
-    });
-  }
-}
-
-for(let file of req.files.files){
-  if(!file.mimetype.startsWith("image/")){
-    return res.json({success:false,message:"Only Images Required"})
-  }
-}
-
-// extract paths
-const files = req.files.files.map(f => f.path);
- const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
-     if(!rule.test(password)){
-      return res.json({success:false,message:"Please use strong password"})
-     }
-
-     if(password!==repeat_pass){
-      return res.json({success:false,message:"Password Must Much"});
-     }
-     const regex = /^(07(8|9|2|3)\d{7})$/;
-     if(!regex.test(phone)){
-      return res.json({success:false,message:"Invalid Phone Number"});
-     }
-    // 2. Prepare Data
+    // 4. Processing
     const hash = await bcrypt.hash(password, 12);
-   
-    // 3. Generate 6-Digit Code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-   const { data, error } = await resend.emails.send({
-  from: "Isonga Market <noreply@isongamarket.com>",
-  to: email,
-  subject: "Verify Your Isonga Seller account",
-  html: verifyEmailTemplate(name, code),
-});
+    const { data, error } = await resend.emails.send({
+      from: "Isonga Market <noreply@isongamarket.com>",
+      to: email,
+      subject: "Verify Your Isonga Seller account",
+      html: verifyEmailTemplate(name, code),
+    });
+
     if (error) {
-      console.error(" Resend Error:", error);
+      console.error("Resend Error:", error);
       return res.status(500).json({ success: false, message: "Email service failed" });
     }
 
@@ -251,14 +235,14 @@ const files = req.files.files.map(f => f.path);
       password: hash,
       description,
       category,
-      acceptedPolicies,
+      acceptedPolicies: isPoliciesAccepted,
       sellerType,
       isVerified: false, 
       verificationCode: code,
       verificationExpires: Date.now() + 10 * 60 * 1000
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: "Verification code sent to your email",
       email
