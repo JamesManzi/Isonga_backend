@@ -48,7 +48,7 @@ const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 25 * 1024 * 1024 // 25MB capacity for uncompressed high-res mobile snaps
+    fileSize: 30 * 1024 * 1024 // 30MB capacity for uncompressed high-res mobile snaps
   }
 });
 
