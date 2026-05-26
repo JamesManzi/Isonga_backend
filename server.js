@@ -3978,7 +3978,7 @@ res.json({ success: true, booking: updatedBooking });
       }
     });
 
-    app.post("/api/seller/view/:id", auth, async (req, res) => {
+    app.post("/api/seller/view/:id", async (req, res) => {
   try {
     const sellerId = req.params.id;
     const buyerId = req.userId;
