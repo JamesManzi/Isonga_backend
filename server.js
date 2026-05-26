@@ -1374,7 +1374,7 @@ app.get("/api/AdminProfile/:id", auth, async (req, res) => {
   }
 });
 
-app.get("/api/view_products/:id", async (req, res) => {
+app.get("/api/view_products/:id",auth, async (req, res) => {
   try {
     const sellerId = req.params.id;
 
@@ -1514,6 +1514,59 @@ app.get("/api/Service_Products/:id", auth, async (req, res) => {
   }
 })
 app.get("/api/Asset_Products/:id", auth, async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+
+    // 1. UPDATE SELLER VIEWS
+    const updatedSeller = await Seller.findByIdAndUpdate(
+      sellerId,
+      { $inc: { views: 1 } },
+      { new: true }
+    );
+
+    if (!updatedSeller) {
+      return res.status(404).json({ success: false, message: "Seller not found" });
+    }
+
+    // 2. FETCH PRODUCTS
+    const products = await Product.find({ seller: sellerId });
+
+    // Note: Mongoose .find() returns an empty array [] if nothing matches, not null.
+    // Checking (!products) won't catch an empty list, so we check the array length instead.
+    if (!products || products.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No products found for this seller!"
+      });
+    }
+
+    // 3. EMIT REAL-TIME UPDATE TO SELLER
+    const sellerRoom = `Seller_${sellerId}`;
+    
+    // Safely look for io on the app object if it's imported in another file
+    const socketInstance = req.app.get("socketio") || io; 
+    
+    if (socketInstance) {
+      socketInstance.to(sellerRoom).emit("viewUpdate", {
+        totalViews: updatedSeller.views,
+        timestamp: new Date()
+      });
+    }
+
+    // 4. SEND SUCCESS RESPONSE
+    // Changed 'seller' to 'updatedSeller' to match your variable above
+    return res.json({
+      success: true,
+      seller: updatedSeller, 
+      products: products
+    });
+
+  } catch (error) {
+    console.error("Error in /api/Asset_Products route:", error);
+    return res.status(500).json({ success: false, message: "View Products Error", details: error.message });
+  }
+});
+app.get("/api/Home_Assets/:id", async (req, res) => {
   try {
     const sellerId = req.params.id;
 
