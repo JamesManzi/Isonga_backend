@@ -1339,6 +1339,42 @@ app.get("/api/view_profile/:id", auth, async (req, res) => {
   }
 });
 
+
+app.get("/api/Home_profile/:id", async (req, res) => {
+  try {
+
+    const sellerId = req.params.id;
+
+    const seller = await Seller.findById(sellerId);
+    if (!seller) {
+      return res.json({ success: false, message: "Seller not found" });
+    }
+
+    const ratings = await Rating.find({ seller: sellerId })
+      .populate("buyer", "name profile");
+
+     const numReviews = ratings.length;
+
+    const averageRating = numReviews>0
+      ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+      : 0;
+
+    res.json({
+      success: true,
+      seller: {
+        ...seller.toObject(),
+        ratings,
+        averageRating,
+        numReviews
+      }
+    });
+
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "View Profile Server Error" });
+  }
+});
+
 app.get("/api/AdminProfile/:id", auth, async (req, res) => {
   try {
 
