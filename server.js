@@ -4183,7 +4183,7 @@ app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
 
 app.get("/api/admin/pending-orders", auth, isAdmin, async (req, res) => {
   try {
-    const orders = await Order.find({ status: "Pending" })
+    const orders = await Order.find({ "items.status": "Pending" })
       .populate("items.product")
       .sort({ createdAt: -1 });
 
