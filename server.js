@@ -4181,6 +4181,25 @@ app.get("/api/admin/dashboard", auth, isAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/pending-orders", auth, isAdmin, async (req, res) => {
+  try {
+    const orders = await Order.find({ status: "Pending" })
+      .populate("items.product")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      orders,
+    });
+  } catch (error) {
+    console.error("Pending Orders Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to load pending orders",
+    });
+  }
+});
+
 // GET /api/admin/users?limit=5
 app.get("/api/admin/users", auth, isAdmin, async (req, res) => {
   try {
