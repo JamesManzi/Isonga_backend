@@ -864,7 +864,7 @@ app.post("/api/verify-reset-code", async (req, res) => {
   res.json({ success: true }); // Move to step 3
 });
 
-app.post("/api/add_product", upload.array("files", 10), auth, async (req, res) => {
+app.post("/api/add_product", upload.array("files", 15), auth, async (req, res) => {
   try {
 
     const { type, name, price, description, quantity } = req.body;

@@ -76,14 +76,14 @@ notes: {
       type: Date
     },
 
-    // 💳 Payment
+   
     paymentMethod: {
       type: String,
       enum: ["cash", "mobile"],
       default: ""
     },
 
-    // ✅ IMPROVED: payment proof per seller
+   
     paymentProofsBySeller: {
       type: Map,
       of: String, // sellerId => image path
