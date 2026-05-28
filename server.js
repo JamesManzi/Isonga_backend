@@ -199,7 +199,7 @@ app.post("/api/register", (req, res, next) => {
     const files = req.files.files.map(f => f.path);
 
     // 4. Password & Phone Validation
-    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+    const rule = /^(?=.*\d).{6,}$/;
     if (!rule.test(password)) {
       return res.json({ success: false, message: "Please use strong password" });
     }
@@ -501,7 +501,7 @@ if(!emailRegex.test(email)){
       })
     }
    const profile=profileImage.path;
-     const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+      const rule = /^(?=.*\d).{6,}$/;
      if(!rule.test(password)){
       return res.json({success:false,messa:"Please use strong password"})
      }
@@ -812,7 +812,7 @@ app.post("/api/reset-password", async (req, res) => {
     if (user.verificationExpires < Date.now()) {
       return res.json({ success: false, message: "Code expired" });
     }
-    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+     const rule = /^(?=.*\d).{6,}$/;
      if(!rule.test(newPassword)){
       return res.json({success:false,messa:"Please use strong password!"})
      }
@@ -1179,7 +1179,7 @@ app.post("/api/seller/reset-password", async (req, res) => {
       return res.json({ success: false, message: "Invalid or expired code" });
     }
 
-    const rule = /^(?=.{10,})(?:(?=.*[a-z])(?=.*[A-Z])(?=.*\d)|(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])).*$/;
+     const rule = /^(?=.*\d).{6,}$/;
      if(!rule.test(newPassword)){
       return res.json({success:false,messa:"Please use strong password"})
      }
