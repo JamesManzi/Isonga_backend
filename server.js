@@ -871,7 +871,7 @@ app.post("/api/add_product", upload.array("files", 15), auth, async (req, res) =
 
    let files = [];
 
-const maxSize = 20 * 1024 * 1024; // 20MB
+const maxSize = 50 * 1024 * 1024; // 20MB
 
 // 2. Check individual file sizes
 if (req.files && req.files.length > 0) {
@@ -879,15 +879,15 @@ if (req.files && req.files.length > 0) {
     if (file.size > maxSize) {
       return res.json({ 
         success: false, 
-        message: `File ${file.originalname} is too large. Max 20MB per file.` 
+        message: `File ${file.originalname} is too large. Max 50MB per file.` 
       });
     }
   }
 
-  if(req.files.length>10){
+  if(req.files.length>15){
     return res.json({
       success:false,
-      message:"Only 10 Files Allowed"
+      message:"Only 15 Files Allowed"
     })
   }
 
