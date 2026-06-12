@@ -79,7 +79,7 @@ const ipLimiter = rateLimit({
   max: 100,
   message: {
     success: false,
-    message: "Too many requests from this IP, try later"
+    message: "Too many requests from this IP, try Again later"
   },
   keyGenerator: (req) => ipKeyGenerator(req), 
 });
@@ -129,7 +129,6 @@ mongoose.connect(process.env.MONGO_URL)
   .catch((error) => console.log(" DB connection error:", error));
 // Seller Register with Email Verification
 app.post("/api/register", (req, res, next) => {
-  // 1. Safe Wrapper: Catch Multer/Cloudinary stream exceptions gracefully before they crash the thread
   upload.fields([
     { name: "profile", maxCount: 1 },
     { name: "files", maxCount: 6 }
@@ -191,7 +190,7 @@ app.post("/api/register", (req, res, next) => {
     const maxGallerySize = 10 * 1024 * 1024; // 10MB
     for (let file of req.files.files) {
       if (file.size > maxGallerySize) {
-        return res.json({ success: false, message: "Each location file must be under 10MB" });
+        return res.json({ success: false, message: "Each location file must not exceed 10MB" });
       }
     }
 

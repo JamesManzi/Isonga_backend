@@ -1,7 +1,7 @@
 const mongoose=require("mongoose");
 const Product=require("./models/product");
 
-mongoose.connect("mongodb://127.0.0.1:27017/Isonga")
+mongoose.connect(process.env.MONGO_URL)
 
 .then(async()=>{
     console.log("Database Connected");
